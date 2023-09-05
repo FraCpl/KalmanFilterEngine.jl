@@ -17,12 +17,12 @@ y_k = h(t_k,x_k) + r_k
 where ``w`` is a zero-mean continuous time white process noise with two-sided power spectral density equal to ``W``, 
 and ``r_k`` is a zero-mean discrete time white measurement noise with covariance equal to ``R_k``. 
 
-# Installation
+## Installation
 Just type:
 ```julia
 using Pkg
 Pkg.add(url="https://github.com/FraCpl/KalmanFilterEngine.jl")
 ```
 
-# Documentation
+## Documentation
 The full documentation is available [here](https://FraCpl.github.io/KalmanFilterEngine.jl/dev/).

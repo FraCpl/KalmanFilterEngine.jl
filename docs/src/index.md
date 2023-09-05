@@ -210,8 +210,7 @@ Pages   = ["ekf.jl", "udekf.jl", "ukf.jl", "srukf.jl", "utils.jl"]
 
 # About the author
 ```KalmanFilterEngine.jl``` was developed by [Francesco Capolupo](https://www.linkedin.com/in/francescocapolupo/),
-GNC System Engineer at the [European Space Agency](https://esa.int), who has more than 10 yearse experience in the 
-design, analysis, and development of spacecraft GNC subsystems in industry and at the Agency. 
+GNC System Engineer at the [European Space Agency](https://esa.int). 
 
 **DISCLAIMER:** this package has no ties whatsoever with ESA, or any other institution, corporation,
  or company, and it only represents a desperate and personal attempt to quit using MATLAB once and for all.

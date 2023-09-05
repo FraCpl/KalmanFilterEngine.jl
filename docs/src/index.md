@@ -2,7 +2,7 @@
 CurrentModule = KalmanFilterEngine
 ```
 
-# KalmanFilterEngine
+# KalmanFilterEngine.jl
 This package provides a set of Kalman filters that can estimate the state of a continuous-time dynamical system
 given as imput a sequence of discrete-time measurements
 ```math

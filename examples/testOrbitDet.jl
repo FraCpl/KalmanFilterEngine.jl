@@ -1,12 +1,11 @@
-using LinearAlgebra
-using Plots: plot, plot!
-using Random
-using BenchmarkTools 
-using ForwardDiff
+using BenchmarkTools
 using DifferentialEquations
 using Distributions
-
+using ForwardDiff
 using KalmanFilterEngine
+using LinearAlgebra
+using Plots
+using Random
 plotlyjs()
 
 # Define Navigation Problem
@@ -39,15 +38,15 @@ function main(;showplot=true)
     navUD = NavStateUD(0.0, x̂₀, P₀)
     navUKF = NavStateUKF(0.0, x̂₀, P₀)
     navSRUKF = NavStateSRUKF(0.0, x̂₀, P₀)
-    
+
     Δt = 100.0
     Q = computeQd([zeros(3,3) I; zeros(3,6)], [zeros(3,3); I], 0.01I, Δt)
 
     x = nav.x̂ + rand(MvNormal(getCov(nav)))
-    X = [x]; T = [0.0]; 
-    X̂ = [nav.x̂]; σ = [getStd(nav)]; 
-    X̂ud = [navUD.x̂]; σud = [getStd(navUD)]; 
-    X̂ukf = [navUKF.x̂]; σukf = [getStd(navUKF)]; 
+    X = [x]; T = [0.0];
+    X̂ = [nav.x̂]; σ = [getStd(nav)];
+    X̂ud = [navUD.x̂]; σud = [getStd(navUD)];
+    X̂ukf = [navUKF.x̂]; σukf = [getStd(navUKF)];
     X̂srukf = [navSRUKF.x̂]; σsrukf = [getStd(navSRUKF)]
     for k in 1:100
         # Generate measurement at t[k]

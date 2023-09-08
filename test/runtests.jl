@@ -1,5 +1,7 @@
+using Distributions
 using KalmanFilterEngine
-using Test, LinearAlgebra, Distributions
+using LinearAlgebra
+using Test
 
 function TEST_UD()
     n = 12
@@ -134,8 +136,8 @@ end
 
 function TEST_UDpropagate4()
     # Case 4: partial correlation
-    # Here we need to carefully redefine P to make sure that the non correlated states 
-    # have cross correlation with themselves equal to zero, i.e., that Pnn is a 
+    # Here we need to carefully redefine P to make sure that the non correlated states
+    # have cross correlation with themselves equal to zero, i.e., that Pnn is a
     # diagonal matrix. Yet we perform a STM propagation of P to include cross-correlation
     # between correlated and non correlated states in P, i.e., Pcn, so to have a test
     # covariance matrix P = [Pcc Pcn; Pnc Pnn] with Pnn diagonal and Pcn ≠ 0.
@@ -161,7 +163,7 @@ function TEST_UDpropagate5()
     P = 0.5(P + transpose(P))
     U, D = KalmanFilterEngine.UD(P)
 
-    # Case 5: partial correlation with some zero process noise terms in 
+    # Case 5: partial correlation with some zero process noise terms in
     # the non-correlated terms
     Q = [generatePosDefMatrix(nc) zeros(nc,n-nc); zeros(n-nc,nc) diagm(abs.([.0; randn(n-nc-1)]))]
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
@@ -184,7 +186,7 @@ function TEST_simpleKalman(type::String)
     Δt = 0.35
     x̂₀ = x₀ + rand(MvNormal(P₀))
     Φ = I + [zeros(3,3) Δt*I; zeros(3,6)]
-    
+
     f(t, x) = [x[4:6]; zeros(3)]
     Jf(t, x) = [zeros(3,3) I; zeros(3,6)]
     h(t, x) = (x[1:3], 0.483*Matrix(I,3,3), [I zeros(3,3)])
@@ -200,24 +202,24 @@ function TEST_simpleKalman(type::String)
     elseif type == "SRUKF"
         nav = NavStateSRUKF(0.0, x̂₀, P₀)
     end
-    
+
     function klm!(nav, y)
         kalmanUpdate!(nav, 0.0, y, h)
         kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps = 10)
     end
-    
+
     function klmSimple(x̂, P, y)
-        # Update 
+        # Update
         K = (P*transpose(H))/(H*P*transpose(H) + R)
         x̂ = x̂ + K*(y - H*x̂)
         P = (I - K*H)*P #*transpose(I - K*H) + K*R*transpose(K)
-        
+
         # Propagation
         x̂ = Φ*x̂
         P = Φ*P*transpose(Φ) + Q
         return x̂, P
     end
-    
+
     ε = -1e8
     x = copy(x₀)
     x̂ = copy(x̂₀)

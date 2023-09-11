@@ -276,7 +276,7 @@ function kalmanUpdateError!(nav::NavStateUD, ty, y, h)
                 nav.U, nav.D = ageeTurnerUpdate(nav.U,nav.D,α,[zeros(nav.ns); K[nav.ns+1:end]]);
             end
 
-            nav.δx[1:nav.ns] = nav.δx[1:nav.ns] + K[1:nav.ns]*δy[i]
+            nav.δx[1:nav.ns] += K[1:nav.ns]*δy[i]
         end
     end
 

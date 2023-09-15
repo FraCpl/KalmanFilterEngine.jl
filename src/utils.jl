@@ -1,16 +1,17 @@
 function odeCore(t0, x0, Δt, f; nSteps=1)
     # 3/8 Runge-Kutta Method
     # http://www.mymathlib.com/diffeq/runge-kutta/runge_kutta_3_8.html
-    t = t0
-    x = x0
+    t = copy(t0)
+    x = copy(x0)
     h = Δt/nSteps
+    K1 = similar(x0); K2 = similar(x0); K3 = similar(x0); K4 = similar(x0)
     for _ in 1:nSteps
-        K1 = h*f(t, x)
-        K2 = h*f(t + 1/3*h, x + K1/3)
-        K3 = h*f(t + 2/3*h, x - K1/3 + K2)
-        K4 = h*f(t + h, x + K1 - K2 + K3)
-        t = t + h
-        x = x + (K1 + 3K2 + 3K3 + K4)/8
+        K1 .= h*f(t, x)
+        K2 .= h*f(t + 1/3*h, x + K1/3)
+        K3 .= h*f(t + 2/3*h, x - K1/3 + K2)
+        K4 .= h*f(t + h, x + K1 - K2 + K3)
+        t += h
+        x += (K1 + 3K2 + 3K3 + K4)/8
     end
 
     return x

@@ -33,7 +33,7 @@ end
 function kalmanOde(t0, x0, Δt, f, Jf; nSteps=1)
     # Append state transition matrix to state vector
     Nx = size(x0,1)
-    x = [x0; Matrix(1.0I,Nx,Nx)[:]]
+    x = [x0; Matrix(1.0I, Nx, Nx)[:]]
     fun(t,x) = [f(t,x[1:Nx]); Jf(t,x[1:Nx])[:]]
 
     # Call Runge-Kutta

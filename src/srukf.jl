@@ -2,12 +2,12 @@ mutable struct NavStateSRUKF
     t::Float64              # Time corresponding to the estimated state
     x̂::Vector{Float64}      # Full estimated state, x̂[t]
     S::Matrix{Float64}      # Cholesky decomposition of covariance matrix S[t]
-    ns::UInt8               # Number of solve for states
-    σᵣ::UInt8               # Outlier rejection threshold
+    ns::Int64               # Number of solve for states
+    σᵣ::Int64               # Outlier rejection threshold
     γ::Float64              # UKF parameters
     Wm::Vector{Float64}     # UKF parameters
     Wc::Vector{Float64}     # UKF parameters
-    L::UInt8                    # Length of state vector
+    L::Int64                    # Length of state vector
     X̂::Vector{Vector{Float64}}  # Sigma point states
 end
 
@@ -98,7 +98,7 @@ function kalmanUpdate!(nav::NavStateSRUKF, ty, y, h)
         # Error state update
         K = (Pxy/Syy)/transpose(Syy)        # Kalman Gain
         K[nav.ns+1:end,:] .= 0.0            # Consider states
-        nav.x̂[1:nav.ns] = nav.x̂[1:nav.ns] + K[1:nav.ns,:]*δy
+        nav.x̂[1:nav.ns] += K[1:nav.ns,:]*δy
 
         U = K*transpose(Syy)
         for i in 1:ny

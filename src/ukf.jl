@@ -2,12 +2,12 @@ mutable struct NavStateUKF
     t::Float64              # Time corresponding to the estimated state
     x̂::Vector{Float64}      # Full estimated state, x̂[t]
     P::Matrix{Float64}      # Covariance matrix P[t]
-    ns::UInt8               # Number of solve for states
-    σᵣ::UInt8               # Outlier rejection threshold
+    ns::Int64               # Number of solve for states
+    σᵣ::Int64               # Outlier rejection threshold
     γ::Float64              # UKF parameters
     Wm::Vector{Float64}     # UKF parameters
     Wc::Vector{Float64}     # UKF parameters
-    L::UInt8                    # Length of state vector
+    L::Int64                    # Length of state vector
     X̂::Vector{Vector{Float64}}  # Sigma point states
 end
 
@@ -63,7 +63,7 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f, Jf, Q; nSteps=1)
     nav.P = copy(Q)
     for i in 1:2*nav.L+1
         δX = nav.X̂[i] - nav.x̂
-        nav.P = nav.P + nav.Wc[i].*δX*transpose(δX)
+        nav.P += nav.Wc[i].*δX*transpose(δX)
     end
 end
 
@@ -86,8 +86,8 @@ function kalmanUpdate!(nav::NavStateUKF, ty, y, h)
     for i in 1:2*nav.L+1
         δY = Ŷ[i] - ŷ
         δX = nav.X̂[i] - nav.x̂
-        Pyy = Pyy + nav.Wc[i].*δY*transpose(δY)
-        Pxy = Pxy + nav.Wc[i].*δX*transpose(δY)
+        Pyy += nav.Wc[i].*δY*transpose(δY)
+        Pxy += nav.Wc[i].*δX*transpose(δY)
     end
 
     # Measurement editing
@@ -99,10 +99,10 @@ function kalmanUpdate!(nav::NavStateUKF, ty, y, h)
     if ~isRejected
         # Error state update
         Ks = Pxy[1:nav.ns,:]/Pyy     # Kalman Gain
-        nav.x̂[1:nav.ns] = nav.x̂[1:nav.ns] + Ks*δy
+        nav.x̂[1:nav.ns] += Ks*δy
 
         # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns,:] = nav.P[1:nav.ns,:] - Ks*[Pyy*transpose(Ks) transpose(Pxy[nav.ns+1:end,:])]
+        nav.P[1:nav.ns,:] -= Ks*[Pyy*transpose(Ks) transpose(Pxy[nav.ns+1:end,:])]
         nav.P[nav.ns+1:end,1:nav.ns] = transpose(nav.P[1:nav.ns,nav.ns+1:end])
     end
 

@@ -4,8 +4,9 @@ mutable struct NavStateUD
     U::Matrix{Float64}      # Covariance Matrix UD, U[t]
     D::Vector{Float64}      # Covariance Matrix UD, D[t]
     δx::Vector{Float64}     # Error state, δx[t]
-    ns::UInt8               # Number of solve for (error) states
-    σᵣ::UInt8               # Outlier rejection threshold
+    ns::Int64               # Number of solve for (error) states
+    σᵣ::Int64               # Outlier rejection threshold
+    nδ::Int64               # Number of error states
 end
 
 """
@@ -16,8 +17,8 @@ state and navigation covariance matrix.
 """
 function NavStateUD(t, x̂, P)
     U, D = UD(P)
-
-    return NavStateUD(t, x̂, U, D, zeros(size(U,1)), size(U,1), 6)
+    nδ = size(U, 1)
+    return NavStateUD(t, x̂, U, D, zeros(nδ), nδ, 6, nδ)
 end
 
 function getCov(nav::NavStateUD)
@@ -25,8 +26,8 @@ function getCov(nav::NavStateUD)
 end
 
 function UD(P)
-    n = size(P,1)
-    U = Matrix(1.0I,n,n)
+    n = size(P, 1)
+    U = Matrix(1.0I, n, n)
     D = zeros(n)
     D[end] = P[end]
     if abs(P[end]) > 1e-9
@@ -163,7 +164,7 @@ function modGramSchmidtReduced(Φ, U, D)
 end
 
 function kalmanPropagate!(nav::NavStateUD, Δt, f, Jf, Q; nSteps=1)
-    nav.t, nav.x̂, Φ = kalmanOde(nav.t, nav.x̂, Δt, f, Jf; nSteps=nSteps)
+    nav.t, nav.x̂, Φ = kalmanOde(nav.t, nav.x̂, Δt, f, Jf, nav.nδ; nSteps=nSteps)
     nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, size(nav.x̂,1))
 end
 

@@ -3,8 +3,9 @@ mutable struct NavState
     x̂::Vector{Float64}      # Full estimated state, x̂[t]
     P::Matrix{Float64}      # Covariance Matrix, P[t]
     δx::Vector{Float64}     # Error state, δx[t]
-    ns::UInt8               # Number of solve for (error) states
-    σᵣ::UInt8               # Outlier rejection threshold
+    ns::Int64               # Number of solve for (error) states
+    σᵣ::Int64               # Outlier rejection threshold
+    nδ::Int64               # Number of error states
 end
 
 """
@@ -14,7 +15,8 @@ Build EKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
 function NavState(t, x̂, P)
-    return NavState(t, x̂, P, zeros(size(P,1)), size(P,1), 6)
+    nδ = size(P, 1)
+    return NavState(t, x̂, P, zeros(nδ), nδ, 6, nδ)
 end
 
 """
@@ -30,17 +32,17 @@ end
 # time to the current time plus Δt using a Runge-Kutta algorithm. It
 # also computes the state transition matrix by numerical integration
 # of the Jacobian of the dynamics.
-function kalmanOde(t0, x0, Δt, f, Jf; nSteps=1)
+@views function kalmanOde(t0, x0, Δt, f, Jf, nδ; nSteps=1)
     # Append state transition matrix to state vector
-    Nx = size(x0,1)
-    x = [x0; Matrix(1.0I, Nx, Nx)[:]]
-    fun(t,x) = [f(t,x[1:Nx]); Jf(t,x[1:Nx])[:]]
+    nx = size(x0, 1)
+    x = [x0; Matrix(1.0I, nδ, nδ)[:]]
+    fun(t, x) = [f(t, x[1:nx]); Jf(t, x[1:nx])[:]]
 
     # Call Runge-Kutta
     x = odeCore(t0, x, Δt, fun; nSteps = nSteps)
 
     # Output results
-    return t0 + Δt, x[1:Nx], reshape(x[Nx+1:end],Nx,Nx)  # t, x, Φ
+    return t0 + Δt, x[1:nx], reshape(x[nx+1:end], nδ, nδ)  # t, x, Φ
 end
 
 # This is the Kalman filter propagation routine for a continuous time
@@ -58,7 +60,7 @@ number of RK4 steps to be performed when numerically integrating the system's
 dynamics. This function is only applicable to EKF and UDEKF.
 """
 function kalmanPropagate!(nav::NavState, Δt, f, Jf, Q; nSteps=1)
-    nav.t, nav.x̂, Φ = kalmanOde(nav.t, nav.x̂, Δt, f, Jf; nSteps=nSteps)
+    nav.t, nav.x̂, Φ = kalmanOde(nav.t, nav.x̂, Δt, f, Jf, nav.nδ; nSteps=nSteps)
     nav.P = Φ*nav.P*transpose(Φ) + Q
 end
 
@@ -101,10 +103,10 @@ function kalmanUpdateError!(nav::NavState, ty, y, h)
     if ~isRejected
         # Error state update
         Ks = Pxy[1:nav.ns,:]/Pyy    # Kalman Gain
-        nav.δx[1:nav.ns] = nav.δx[1:nav.ns] + Ks*δy
+        nav.δx[1:nav.ns] += Ks*δy
 
         # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns,:] = nav.P[1:nav.ns,:] - Ks*[Pyy*transpose(Ks) transpose(Pxy[nav.ns+1:end,:])]
+        nav.P[1:nav.ns,:] -= Ks*[Pyy*transpose(Ks) transpose(Pxy[nav.ns+1:end,:])]
         nav.P[nav.ns+1:end,1:nav.ns] = transpose(nav.P[1:nav.ns,nav.ns+1:end])
     end
 

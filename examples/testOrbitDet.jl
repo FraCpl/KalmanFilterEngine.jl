@@ -6,7 +6,7 @@ using KalmanFilterEngine
 using LinearAlgebra
 using Plots
 using Random
-plotlyjs()
+#plotlyjs()
 
 # Define Navigation Problem
 f(t, x) = [x[4:6]; -3.986e14/norm(x[1:3])^3*x[1:3]]

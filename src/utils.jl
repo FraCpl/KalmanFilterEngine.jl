@@ -11,7 +11,7 @@ function odeCore(t0, x0, Δt, f; nSteps=1)
         K3 .= h*f(t + 2/3*h, x - K1/3 + K2)
         K4 .= h*f(t + h, x + K1 - K2 + K3)
         t += h
-        x += (K1 + 3K2 + 3K3 + K4)/8
+        x .+= (K1 + 3K2 + 3K3 + K4)/8
     end
 
     return x
@@ -23,10 +23,8 @@ end
 Generate a random positive definite matrix of size ```n```.
 """
 function generatePosDefMatrix(n)
-    P = rand(n,n)
-    P = (P + transpose(P))/2 + Matrix(n*I,n,n)
-
-    return P
+    P = rand(n, n)
+    return (P + transpose(P))/2 + Matrix(n*I, n, n)
 end
 
 """

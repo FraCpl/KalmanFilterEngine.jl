@@ -102,12 +102,12 @@ function kalmanUpdateError!(nav::NavState, ty, y, h)
     # Update error state and covariance matrix
     if ~isRejected
         # Error state update
-        Ks = Pxy[1:nav.ns,:]/Pyy    # Kalman Gain
+        Ks = Pxy[1:nav.ns, :]/Pyy    # Kalman Gain
         nav.δx[1:nav.ns] += Ks*δy
 
         # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns,:] -= Ks*[Pyy*transpose(Ks) transpose(Pxy[nav.ns+1:end,:])]
-        nav.P[nav.ns+1:end,1:nav.ns] = transpose(nav.P[1:nav.ns,nav.ns+1:end])
+        nav.P[1:nav.ns, :] -= Ks*[Pyy*transpose(Ks) transpose(Pxy[nav.ns+1:end, :])]
+        nav.P[nav.ns+1:end, 1:nav.ns] = transpose(nav.P[1:nav.ns, nav.ns+1:end])
     end
 
     return δy, δz, isRejected

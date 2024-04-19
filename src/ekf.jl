@@ -39,7 +39,7 @@ end
     fun(t, x) = [f(t, x[1:nx]); Jf(t, x[1:nx])[:]]
 
     # Call Runge-Kutta
-    x = odeCore(t0, x, Δt, fun; nSteps = nSteps)
+    x = odeCore(t0, x, Δt, fun; nSteps=nSteps)
 
     # Output results
     return t0 + Δt, x[1:nx], reshape(x[nx+1:end], nδ, nδ)  # t, x, Φ

@@ -7,7 +7,7 @@ function TEST_UD()
     n = 12
     P = generatePosDefMatrix(n)
     U, D = KalmanFilterEngine.UD(P)
-    ε = U*diagm(D)*transpose(U) - P
+    ε = U*diagm(D)*U' - P
     return  maximum(abs.(ε))
 end
 
@@ -15,7 +15,7 @@ function TEST_generatePosDefMatrix()
     n = 19
     P = generatePosDefMatrix(n)
     λ = eigvals(P)
-    ε = maximum(abs.(P - transpose(P)))
+    ε = maximum(abs.(P - P'))
     return (~(all(isreal(λ)) && minimum(λ) > 0.0))*1.0 + ε
 end
 
@@ -27,7 +27,7 @@ function TEST_ageeTurnerUpdate()
     x = randn(n)
 
     Ũ, D̃ = KalmanFilterEngine.ageeTurnerUpdate(U, D, c, x)
-    ε = Ũ*diagm(D̃)*transpose(Ũ) - (P + c.*x*transpose(x))
+    ε = Ũ*diagm(D̃)*Ũ' - (P + c.*x*x')
     return maximum(abs.(ε))
 end
 
@@ -40,8 +40,8 @@ function TEST_carlsonUpdate()
 
     K, U, D, α = KalmanFilterEngine.carlsonUpdate(Ū, D̄, H[:], R)
 
-    ε1 = maximum(abs.(U*diagm(D)*transpose(U) - (P - K*H*P)))
-    ε2 = α - ((H*P*transpose(H))[1] + R)
+    ε1 = maximum(abs.(U*diagm(D)*U' - (P - K*H*P)))
+    ε2 = α - ((H*P*H')[1] + R)
     return maximum([ε1; ε2])
 end
 
@@ -55,10 +55,10 @@ function TEST_modGramSchmidt()
     Φw = randn(n,nw)
 
     Ū, D̄ = KalmanFilterEngine.modGramSchmidt(Φ, U, D, Φw, Q)
-    ε1 = Ū*diagm(D̄)*transpose(Ū) - (Φ*P*transpose(Φ) + Φw*diagm(Q)*transpose(Φw))
+    ε1 = Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Φw*diagm(Q)*Φw')
 
     U2, D2 = KalmanFilterEngine.modGramSchmidtReduced(Φ, U, D)
-    ε2 = U2*diagm(D2)*transpose(U2) - Φ*P*transpose(Φ)
+    ε2 = U2*diagm(D2)*U2' - Φ*P*Φ'
 
     return maximum([maximum(abs.(ε1)); maximum(abs.(ε2))])
 end
@@ -90,7 +90,7 @@ function TEST_UDpropagate1()
     # Case 1: full correlation, diagonal Qxx
     Q = diagm(abs.(randn(n)))
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
-    return maximum(abs.(Ū*diagm(D̄)*transpose(Ū) - (Φ*P*transpose(Φ) + Q)))
+    return maximum(abs.(Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Q)))
 end
 
 function TEST_UDpropagate2()
@@ -103,7 +103,7 @@ function TEST_UDpropagate2()
     # Case 2: full correlation, full Qxx
     Q = generatePosDefMatrix(n)
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
-    return maximum(abs.(Ū*diagm(D̄)*transpose(Ū) - (Φ*P*transpose(Φ) + Q)))
+    return maximum(abs.(Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Q)))
 end
 
 function TEST_UDpropagate2b()
@@ -117,7 +117,7 @@ function TEST_UDpropagate2b()
     # Case 2: full correlation, full Qxx
     Q = computeQd([zeros(3,3) I; zeros(3,6)], [zeros(3,3); I], 0.01I, Δt)
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
-    return maximum(abs.(Ū*diagm(D̄)*transpose(Ū) - (Φ*P*transpose(Φ) + Q)))
+    return maximum(abs.(Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Q)))
 end
 
 function TEST_UDpropagate3()
@@ -131,7 +131,7 @@ function TEST_UDpropagate3()
     Q = zeros(n,n)
 
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
-    return maximum(abs.(Ū*diagm(D̄)*transpose(Ū) - (Φ*P*transpose(Φ) + Q)))
+    return maximum(abs.(Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Q)))
 end
 
 function TEST_UDpropagate4()
@@ -145,13 +145,13 @@ function TEST_UDpropagate4()
     nc = 6
     Φ = [randn(nc,n); zeros(n-nc,nc) diagm(exp.(-abs.(randn(n-nc))))]
     P = [generatePosDefMatrix(nc) zeros(nc,n-nc); zeros(n-nc,nc) diagm(abs.(randn(n-nc)))]
-    P = Φ*P*transpose(Φ)
-    P = 0.5(P + transpose(P))
+    P = Φ*P*Φ'
+    P = 0.5(P + P')
     U, D = KalmanFilterEngine.UD(P)
 
     Q = [generatePosDefMatrix(nc) zeros(nc,n-nc); zeros(n-nc,nc) diagm(abs.(randn(n-nc)))]
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
-    return maximum(abs.(Ū*diagm(D̄)*transpose(Ū) - (Φ*P*transpose(Φ) + Q)))
+    return maximum(abs.(Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Q)))
 end
 
 function TEST_UDpropagate5()
@@ -159,15 +159,15 @@ function TEST_UDpropagate5()
     nc = 6
     Φ = [randn(nc,n); zeros(n-nc,nc) diagm(exp.(-abs.(randn(n-nc))))]
     P = [generatePosDefMatrix(nc) zeros(nc,n-nc); zeros(n-nc,nc) diagm(abs.(randn(n-nc)))]
-    P = Φ*P*transpose(Φ)
-    P = 0.5(P + transpose(P))
+    P = Φ*P*Φ'
+    P = 0.5(P + P')
     U, D = KalmanFilterEngine.UD(P)
 
     # Case 5: partial correlation with some zero process noise terms in
     # the non-correlated terms
     Q = [generatePosDefMatrix(nc) zeros(nc,n-nc); zeros(n-nc,nc) diagm(abs.([.0; randn(n-nc-1)]))]
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
-    return maximum(abs.(Ū*diagm(D̄)*transpose(Ū) - (Φ*P*transpose(Φ) + Q)))
+    return maximum(abs.(Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Q)))
 end
 
 function TEST_cholupdate(sgn)
@@ -176,7 +176,7 @@ function TEST_cholupdate(sgn)
     x = 0.3*randn(n)
     V = copy(S); y = copy(x)
     KalmanFilterEngine.cholupdate!(V,y,sgn)
-    Vtrue = cholesky(transpose(S)*S + sgn*x*transpose(x)).U
+    Vtrue = cholesky(S'*S + sgn*x*x').U
     maximum(abs.(Vtrue - V))
 end
 

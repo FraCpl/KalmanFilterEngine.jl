@@ -123,18 +123,18 @@ measurement function only needs to provide ```ŷ``` and ```R``` as outputs.
 """
 function kalmanUpdate!(nav::NavStateEKF, t, y, h)
     if nav.iter > 0
-        return kalmanUpdateIter!(nav, t, y, h)  # This is an IEKF
+        return kalmanUpdateIter!(nav, t, y, h, nav.iter)  # This is an IEKF
     end
 
     δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
-    nav.x̂ += nav.δx
+    nav.x̂ .+= nav.δx
     resetErrorState!(nav)
 
     return δy, δz, isRejected
 end
 
 # This update routine implements an IKEF
-function kalmanUpdateIter!(nav::NavStateEKF, t, y, h)
+function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter)
     # Estimated measurement and jacobians
     ŷ, R, H = h(t, nav.x̂)
     Pxy = nav.P*H'
@@ -151,7 +151,7 @@ function kalmanUpdateIter!(nav::NavStateEKF, t, y, h)
         xIter = copy(nav.x̂)
 
         # Start iterations
-        for i in 1:nav.iter
+        for i in 1:iter
             if i > 1
                 ŷ, R, H = h(t, xIter)
                 Pxy .= nav.P*H'

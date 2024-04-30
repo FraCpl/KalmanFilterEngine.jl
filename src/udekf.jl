@@ -284,7 +284,7 @@ end
 
 function kalmanUpdate!(nav::NavStateUD, t, y, h)
     δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
-    nav.x̂ += nav.δx
+    nav.x̂ .+= nav.δx
     resetErrorState!(nav)
     return δy, δz, isRejected
 end

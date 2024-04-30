@@ -28,9 +28,7 @@ Four different filters are implemented in ```KalmanFilterEngine.jl```
 * UD-factorized Extended Kalman Filter (UDEKF)
 * Unscented Kalman Filter (UKF)
 * Square-root Unscented Kalman Filter (SRUKF)
-The type of filter can be chosen when initializing the navigation state via the four different
-initialization functions available: [`NavState`](@ref) (EKF), [`NavStateUD`](@ref) (UDEKF), [`NavStateUKF`](@ref) (UKF), and 
-[`NavStateSRUKF`](@ref) (SRUKF). 
+The type of filter can be chosen when initializing the navigation state via the [`NavState`](@ref) function: EKF, UDEKF, IEKF, UKF, and SRUKF. 
 ```KalmanFilterEngine.jl``` provides the two necessary key functions that need to be used to build a Kalman filter: [`kalmanPropagate!`](@ref)
 and [`kalmanUpdate!`](@ref). Whichever the filter chosen by the user, these two functions will have the same exact interface,
 to make it easy to swap and test different filters formulations with minimal to no modification to the Kalman filter design.
@@ -44,13 +42,13 @@ end
 ```
 can be reused whichever the filter formulation
 ```julia
-ty, y = myMeasFun(...)              # Get measurement
+ty, y = myMeasFun(...)                      # Get measurement
 
-navEKF = NavState(t₀, x₀, P₀)       # Initialize EKF state
-myKalmanStep!(navEKF, ty, y)        # execute EKF step
+navEKF = NavState(t₀, x₀, P₀; type=:EKF)    # Initialize EKF state
+myKalmanStep!(navEKF, ty, y)                # execute EKF step
 
-navUKF = NavStateUKF(t₀, x₀, P₀)    # Initialize UKF state
-myKalmanStep!(navUKF, ty, y)        # Execute UKF step
+navUKF = NavState(t₀, x₀, P₀; type=:UKF)    # Initialize UKF state
+myKalmanStep!(navUKF, ty, y)                # Execute UKF step
 ```
 
 The key parameters that are needed to define the navigation problem, and that need to be feed to the Kalman filter

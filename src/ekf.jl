@@ -1,4 +1,4 @@
-mutable struct NavState
+mutable struct NavStateEKF <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
     x̂::Vector{Float64}      # Full estimated state, x̂[t]
     P::Matrix{Float64}      # Covariance Matrix, P[t]
@@ -9,14 +9,14 @@ mutable struct NavState
 end
 
 """
-    NavState(t, x̂, P)
+    NavStateEKF(t, x̂, P)
 
 Build EKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavState(t, x̂, P)
+function NavStateEKF(t, x̂, P)
     nδ = size(P, 1)
-    return NavState(t, x̂, P, zeros(nδ), nδ, 6, nδ)
+    return NavStateEKF(t, x̂, P, zeros(nδ), nδ, 6, nδ)
 end
 
 """
@@ -24,9 +24,7 @@ end
 
 Get navigation covariance matrix ``P``.
 """
-function getCov(nav::NavState)
-    return nav.P
-end
+getCov(nav::NavStateEKF) = nav.P
 
 # This function propagates the full navigation state from the current
 # time to the current time plus Δt using a Runge-Kutta algorithm. It
@@ -59,9 +57,9 @@ covariance matrix ```Q```. The optional keyword argument ```nSteps``` indicates 
 number of RK4 steps to be performed when numerically integrating the system's
 dynamics. This function is only applicable to EKF and UDEKF.
 """
-function kalmanPropagate!(nav::NavState, Δt, f, Jf, Q; nSteps=1)
+function kalmanPropagate!(nav::NavStateEKF, Δt, f, Jf, Q; nSteps=1)
     nav.t, nav.x̂, Φ = kalmanOde(nav.t, nav.x̂, Δt, f, Jf, nav.nδ; nSteps=nSteps)
-    nav.P = Φ*nav.P*transpose(Φ) + Q
+    nav.P = Φ*nav.P*Φ' + Q
 end
 
 """
@@ -74,24 +72,24 @@ covariance matrix ```Q```. The optional keyword argument ```nSteps``` indicates 
 number of RK4 steps to be performed when numerically integrating the system's
 dynamics.
 """
-function kalmanPropagate!(nav::NavState, Δt, f, Q; nSteps=1)
+function kalmanPropagate!(nav::NavStateEKF, Δt, f, Q; nSteps=1)
     Jf(t, x) = ForwardDiff.jacobian(x -> f(t, x), x)
     kalmanPropagate!(nav, Δt, f, Jf, Q, nSteps = nSteps)
 end
 
 """
-    kalmanUpdateError!(nav, ty, y, h)
+    kalmanUpdateError!(nav, t, y, h)
 
 Update error state of the Kalman filter using the input measurement.
 
-Inputs include the measurement time ```ty```, measurement ```y```,
+Inputs include the measurement time ```t```, measurement ```y```,
 measurement equation function ```ŷ, R, H = h(t, x̂)```. This function is only applicable
 to EKF and UDEKF.
 """
-function kalmanUpdateError!(nav::NavState, ty, y, h)
+function kalmanUpdateError!(nav::NavStateEKF, t, y, h)
     # Estimated measurement and jacobians
-    ŷ, R, H = h(ty, nav.x̂)
-    Pxy = nav.P*transpose(H)
+    ŷ, R, H = h(t, nav.x̂)
+    Pxy = nav.P*H'
     Pyy = H*Pxy + R
 
     # Measurement editing
@@ -106,24 +104,24 @@ function kalmanUpdateError!(nav::NavState, ty, y, h)
         nav.δx[1:nav.ns] += Ks*δy
 
         # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns, :] -= Ks*[Pyy*transpose(Ks) transpose(Pxy[nav.ns+1:end, :])]
-        nav.P[nav.ns+1:end, 1:nav.ns] = transpose(nav.P[1:nav.ns, nav.ns+1:end])
+        nav.P[1:nav.ns, :] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:end, :]']
+        nav.P[nav.ns+1:end, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:end]'
     end
 
     return δy, δz, isRejected
 end
 
 """
-    kalmanUpdate!(nav, ty, y, h)
+    kalmanUpdate!(nav, t, y, h)
 
 Update state of the Kalman filter using the input measurement.
 
-Inputs include the measurement time ```ty```, measurement ```y```,
+Inputs include the measurement time ```t```, measurement ```y```,
 measurement equation function ```ŷ, R, H = h(t, x̂)```. When using SRUKF or UKF, the
 measurement function only needs to provide ```ŷ``` and ```R``` as outputs.
 """
-function kalmanUpdate!(nav::NavState, ty, y, h)
-    δy, δz, isRejected = kalmanUpdateError!(nav, ty, y, h)
+function kalmanUpdate!(nav::NavStateEKF, t, y, h)
+    δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
     nav.x̂ += nav.δx
     resetErrorState!(nav)
 

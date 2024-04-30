@@ -1,4 +1,4 @@
-mutable struct NavStateUD
+mutable struct NavStateUD <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
     x̂::Vector{Float64}      # Full estimated state, x̂[t]
     U::Matrix{Float64}      # Covariance Matrix UD, U[t]
@@ -21,9 +21,7 @@ function NavStateUD(t, x̂, P)
     return NavStateUD(t, x̂, U, D, zeros(nδ), nδ, 6, nδ)
 end
 
-function getCov(nav::NavStateUD)
-    return nav.U*diagm(nav.D)*transpose(nav.U)
-end
+getCov(nav::NavStateUD) = nav.U*diagm(nav.D)*nav.U'
 
 function UD(P)
     n = size(P, 1)
@@ -91,7 +89,7 @@ function carlsonUpdate(Ū, D̄, H, R)
 
     f[1] = H[1]
     for i in 2:n
-        f[i] = (transpose(Ū[1:i, i:i])*H[1:i])[1]   # f = Ū'*H';
+        f[i] = (Ū[1:i, i:i]'*H[1:i])[1]   # f = Ū'*H';
     end
     v = D̄.*f
     K̄[1] = v[1]
@@ -122,17 +120,17 @@ function modGramSchmidt(Φ, U, D, Φw, Q)
     D̄ = zeros(n)
     D̃ = [D; Q]
 
-    b = transpose([Φ*U Φw])
+    b = [Φ*U Φw]'
     for j in n:-1:2
-        f = D̃.*b[:,j]
-        D̄[j] = transpose(b[:,j])*f
+        f = D̃.*b[:, j]
+        D̄[j] = b[:, j]'*f
         f = f./D̄[j]
         for i in 1:j-1
-            Ū[i,j] = transpose(b[:,i])*f
-            b[:,i] = b[:,i] - Ū[i,j]*b[:,j]
+            Ū[i,j] = b[:, i]'*f
+            b[:,i] = b[:, i] - Ū[i, j]*b[:, j]
         end
     end
-    D̄[1] = transpose(b[:,1])*(D̃.*b[:,1])
+    D̄[1] = b[:, 1]'*(D̃.*b[:, 1])
 
     return Ū, D̄
 end
@@ -146,19 +144,19 @@ function modGramSchmidtReduced(Φ, U, D)
     Ū = Matrix(1.0I, n, n)
     D̄ = zeros(n)
 
-    b = transpose(Φ*U)
+    b = (Φ*U)'
     for j = n:-1:2
-        f = D.*b[:,j]
-        D̄[j] = transpose(b[:,j])*f
+        f = D.*b[:, j]
+        D̄[j] = b[:, j]'*f
         if D̄[j] > 0              # CHECK THIS IF, there was none before
             f = f./D̄[j]
         end
         for i = 1:j-1
-            Ū[i, j] = transpose(b[:, i])*f;
+            Ū[i, j] = b[:, i]'*f;
             b[:, i] = b[:, i] - Ū[i, j]*b[:, j];
         end
     end
-    D̄[1] = transpose(b[:, 1])*(D.*b[:, 1]);
+    D̄[1] = b[:, 1]'*(D.*b[:, 1]);
 
     return Ū, D̄
 end
@@ -244,9 +242,9 @@ function UDpropagate(U, D, Φ, Q, nc)
     return Ū, D̄
 end
 
-function kalmanUpdateError!(nav::NavStateUD, ty, y, h)
+function kalmanUpdateError!(nav::NavStateUD, t, y, h)
     # Estimated measurement and jacobians
-    ŷ, R, H = h(ty, nav.x̂)
+    ŷ, R, H = h(t, nav.x̂)
 
     # Decorrelate measurement if R is not diagonal
     if ~isdiag(R)
@@ -260,7 +258,7 @@ function kalmanUpdateError!(nav::NavStateUD, ty, y, h)
 
     for i in 1:ny
         W1 = H[i:i,:]*nav.U
-        Ph = W1*diagm(nav.D)*transpose(W1)
+        Ph = W1*diagm(nav.D)*W1'
 
         # Measurement Editing (innovation check)
         δy[i] = y[i] - ŷ[i] - (H[i:i, :]*nav.δx)[1]
@@ -284,8 +282,8 @@ function kalmanUpdateError!(nav::NavStateUD, ty, y, h)
     return δy, δz, isRejected
 end
 
-function kalmanUpdate!(nav::NavStateUD, ty, y, h)
-    δy, δz, isRejected = kalmanUpdateError!(nav, ty, y, h)
+function kalmanUpdate!(nav::NavStateUD, t, y, h)
+    δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
     nav.x̂ += nav.δx
     resetErrorState!(nav)
     return δy, δz, isRejected

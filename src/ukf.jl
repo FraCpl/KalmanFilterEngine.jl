@@ -1,4 +1,4 @@
-mutable struct NavStateUKF
+mutable struct NavStateUKF <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
     x̂::Vector{Float64}      # Full estimated state, x̂[t]
     P::Matrix{Float64}      # Covariance matrix P[t]
@@ -53,7 +53,7 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f, Jf, Q; nSteps=1)
     computeSigmaPoints!(nav)
 
     # Propagate sigma points
-    nav.X̂ = odeCore.(Ref(nav.t), nav.X̂, Ref(Δt), Ref(f); nSteps=nSteps)
+    nav.X̂ = odeCore.(nav.t, nav.X̂, Δt, f; nSteps=nSteps)
     nav.t = nav.t + Δt
 
     # Compute mean state
@@ -63,7 +63,7 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f, Jf, Q; nSteps=1)
     nav.P = copy(Q)
     for i in 1:2*nav.L+1
         δX = nav.X̂[i] - nav.x̂
-        nav.P += nav.Wc[i].*δX*transpose(δX)
+        nav.P += nav.Wc[i].*δX*δX'
     end
 end
 
@@ -71,23 +71,23 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f, Q; nSteps=1)
     kalmanPropagate!(nav, Δt, f, nothing, Q, nSteps=nSteps)
 end
 
-function kalmanUpdate!(nav::NavStateUKF, ty, y, h)
+function kalmanUpdate!(nav::NavStateUKF, t, y, h)
     # Create sigma points
     computeSigmaPoints!(nav)
 
     # Compute mean estimated measurement
-    out = h.(Ref(ty),nav.X̂)
-    Ŷ = getindex.(out,1)
+    out = h.(t, nav.X̂)
+    Ŷ = getindex.(out, 1)
     ŷ = sum(nav.Wm.*Ŷ)
 
     # Compute sigma statistics
-    Pxy = zeros(nav.L,length(ŷ))
-    Pyy = getindex.(out,2)[1]   # R
+    Pxy = zeros(nav.L, length(ŷ))
+    Pyy = getindex.(out, 2)[1]   # R
     for i in 1:2*nav.L+1
         δY = Ŷ[i] - ŷ
         δX = nav.X̂[i] - nav.x̂
-        Pyy += nav.Wc[i].*δY*transpose(δY)
-        Pxy += nav.Wc[i].*δX*transpose(δY)
+        Pyy += nav.Wc[i].*δY*δY'
+        Pxy += nav.Wc[i].*δX*δY'
     end
 
     # Measurement editing
@@ -102,8 +102,8 @@ function kalmanUpdate!(nav::NavStateUKF, ty, y, h)
         nav.x̂[1:nav.ns] += Ks*δy
 
         # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns,:] -= Ks*[Pyy*transpose(Ks) transpose(Pxy[nav.ns+1:end,:])]
-        nav.P[nav.ns+1:end,1:nav.ns] = transpose(nav.P[1:nav.ns,nav.ns+1:end])
+        nav.P[1:nav.ns,:] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:end,:]']
+        nav.P[nav.ns+1:end,1:nav.ns] = nav.P[1:nav.ns,nav.ns+1:end]'
     end
 
     return δy, δz, isRejected

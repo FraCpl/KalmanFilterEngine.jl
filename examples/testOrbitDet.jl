@@ -4,9 +4,9 @@ using Distributions
 using ForwardDiff
 using KalmanFilterEngine
 using LinearAlgebra
-using Plots
+using GLMakie
 using Random
-#plotlyjs()
+using JTools
 
 # Define Navigation Problem
 f(t, x) = [x[4:6]; -3.986e14/norm(x[1:3])^3*x[1:3]]
@@ -20,7 +20,7 @@ function kalmanFilter!(nav, Δt, ty, y, Q)
     # Update step at t[k-1] with y[k-1]
     kalmanUpdate!(nav, ty, y, h)
 
-    if hasfield(typeof(nav),:P)
+    if hasfield(typeof(nav), :P)
         nav.P = 0.5(nav.P + transpose(nav.P))
     end
 
@@ -35,9 +35,9 @@ function main(;showplot=true)
     P₀ = Diagonal([1.0e3; 1.0e3; 1.0e3; 1.0e2; 1.0e2; 1.0e2].^2)
 
     nav = NavState(0.0, x̂₀, P₀)
-    navUD = NavStateUD(0.0, x̂₀, P₀)
-    navUKF = NavStateUKF(0.0, x̂₀, P₀)
-    navSRUKF = NavStateSRUKF(0.0, x̂₀, P₀)
+    navUD = NavState(0.0, x̂₀, P₀; type=:UD)
+    navUKF = NavState(0.0, x̂₀, P₀; type=:UKF)
+    navSRUKF = NavState(0.0, x̂₀, P₀; type=:SRUKF)
 
     Δt = 100.0
     Q = computeQd([zeros(3,3) I; zeros(3,6)], [zeros(3,3); I], 0.01I, Δt)
@@ -81,26 +81,30 @@ function main(;showplot=true)
 
     # Plotting results
     if showplot
-        function plotnav(i,T,X,X̂,σ,linestyle)
-            plot!(T, X - X̂; ticks=:native, lab="", linestyle=linestyle, subplot = i)
-            plot!(T, +3σ; color=:red, lab="", linestyle=linestyle, subplot = i)
-            plot!(T, -3σ; color=:red, lab="", linestyle=linestyle, subplot = i)
+        function plotnav(ax, T, X, X̂, σ; kwargs...)
+            lines!(ax, T, X - X̂; kwargs...)
+            lines!(ax, T, +3σ; linewidth=2, kwargs...)
+            lines!(ax, T, -3σ; linewidth=2, kwargs...)
         end
-
-        pp = plot(layout = (2,3))
-        lbl = ["x [m]"; "y [m]"; "z [m]"; "vx [m/s]"; "vy [m/s]"; "vz [m/s]"]
+        set_theme!(theme_fra())
+        fig = Figure(size=(1100, 670))
+        axs = [
+                Axis(fig[1, 1]; xlabel="Time [s]", ylabel="x [m]", limits=(T[1], T[end], nothing, nothing)),
+                Axis(fig[1, 2]; xlabel="Time [s]", ylabel="y [m]", title="Nav performance", limits=(T[1], T[end], nothing, nothing)),
+                Axis(fig[1, 3]; xlabel="Time [s]", ylabel="z [m]", limits=(T[1], T[end], nothing, nothing)),
+                Axis(fig[2, 1]; xlabel="Time [s]", ylabel="vx [m/s]", limits=(T[1], T[end], nothing, nothing)),
+                Axis(fig[2, 2]; xlabel="Time [s]", ylabel="vy [m/s]", limits=(T[1], T[end], nothing, nothing)),
+                Axis(fig[2, 3]; xlabel="Time [s]", ylabel="vz [m/s]", limits=(T[1], T[end], nothing, nothing)),
+            ]
         for i in 1:6
-            plotnav(i, T, getindex.(X,i), getindex.(X̂,i), getindex.(σ,i),:solid)
-            plotnav(i, T, getindex.(X,i), getindex.(X̂ud,i), getindex.(σud,i),:dash)
-            plotnav(i, T, getindex.(X,i), getindex.(X̂ukf,i), getindex.(σukf,i),:dot)
-            plotnav(i, T, getindex.(X,i), getindex.(X̂srukf,i), getindex.(σsrukf,i),:dashdot)
-            plot!(subplot =i, top_margin = 5*Plots.mm, bottom_margin = 5*Plots.mm, left_margin = 0*Plots.mm, right_margin = 0*Plots.mm)
-            xlabel!(subplot = i, "Time [s]"); ylabel!(subplot = i, lbl[i])
-            if i == 2; title!(subplot = i, "Nav performance"); end
+            plotnav(axs[i], T, getindex.(X,i), getindex.(X̂,i), getindex.(σ,i); color=:blue)
+            plotnav(axs[i], T, getindex.(X,i), getindex.(X̂ud,i), getindex.(σud,i); color=:red)
+            plotnav(axs[i], T, getindex.(X,i), getindex.(X̂ukf,i), getindex.(σukf,i); color=:green)
+            plotnav(axs[i], T, getindex.(X,i), getindex.(X̂srukf,i), getindex.(σsrukf,i); color=:orange)
         end
-        display(plot(pp, size = (1100,670), bg = RGB(40/255, 44/255, 52/255), fg = RGB(0.7,0.7,0.7), right_margin = 10*Plots.mm))
+        display(fig)
     end
-    return T, X, X̂, σ
+    return nothing
 end
 
 main();

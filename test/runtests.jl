@@ -180,7 +180,7 @@ function TEST_cholupdate(sgn)
     maximum(abs.(Vtrue - V))
 end
 
-function TEST_simpleKalman(type::String)
+function TEST_simpleKalman(type::Symbol)
     P₀ = generatePosDefMatrix(6)
     x₀ = zeros(6)
     Δt = 0.35
@@ -193,15 +193,7 @@ function TEST_simpleKalman(type::String)
     Q = computeQd(Jf(0.0,zeros(6)), [zeros(3,3); I], 0.005616*Matrix(I,3,3), Δt)
     dummy, R, H = h(0,zeros(6))
 
-    if type == "EKF"
-        nav = NavState(0.0, x̂₀, P₀)
-    elseif type == "UDEKF"
-        nav = NavStateUD(0.0, x̂₀, P₀)
-    elseif type == "UKF"
-        nav = NavStateUKF(0.0, x̂₀, P₀)
-    elseif type == "SRUKF"
-        nav = NavStateSRUKF(0.0, x̂₀, P₀)
-    end
+    nav = NavState(0.0, x̂₀, P₀; type=type)
 
     function klm!(nav, y)
         kalmanUpdate!(nav, 0.0, y, h)
@@ -210,13 +202,13 @@ function TEST_simpleKalman(type::String)
 
     function klmSimple(x̂, P, y)
         # Update
-        K = (P*transpose(H))/(H*P*transpose(H) + R)
+        K = (P*H')/(H*P*H' + R)
         x̂ = x̂ + K*(y - H*x̂)
         P = (I - K*H)*P #*transpose(I - K*H) + K*R*transpose(K)
 
         # Propagation
         x̂ = Φ*x̂
-        P = Φ*P*transpose(Φ) + Q
+        P = Φ*P*Φ' + Q
         return x̂, P
     end
 
@@ -252,8 +244,8 @@ end
     @test TEST_UDpropagate5() < ERR_TOL
     @test TEST_cholupdate(+1.0) < ERR_TOL
     @test TEST_cholupdate(-1.0) < ERR_TOL
-    @test TEST_simpleKalman("EKF") < ERR_TOL
-    @test TEST_simpleKalman("UDEKF") < ERR_TOL
-    @test TEST_simpleKalman("UKF") < 100*ERR_TOL
-    @test TEST_simpleKalman("SRUKF") < 100*ERR_TOL
+    @test TEST_simpleKalman(:EKF) < ERR_TOL
+    @test TEST_simpleKalman(:UD) < ERR_TOL
+    @test TEST_simpleKalman(:UKF) < 100*ERR_TOL
+    @test TEST_simpleKalman(:SRUKF) < 100*ERR_TOL
 end

@@ -24,7 +24,7 @@ Generate a random positive definite matrix of size ```n```.
 """
 function generatePosDefMatrix(n)
     P = rand(n, n)
-    return (P + transpose(P))/2 + Matrix(n*I, n, n)
+    return (P + P')/2 + Matrix(n*I, n, n)
 end
 
 """
@@ -62,15 +62,15 @@ continuous time linear system ``\\dot x = F_x x + F_w w``, where ``w`` is a whit
 power spectral density equal to ``W``.
 """
 function computeQd(Fx, Fw, W, Δt)
-    Q = Fw*W*transpose(Fw)
+    Q = Fw*W*Fw'
     n = size(Fx,1)
 
     # Exact method for LTI, from: C. Van Loan, Computing integrals
     # involving the matrix exponential, IEEE Transactions on Automatic
     # Control. 23 (3): 395–404, 1978
-    G = exp([-Fx Q; zeros(n,n) transpose(Fx)].*Δt)
-    Φ = transpose(G[n+1:2*n,n+1:2*n])
-    Qd = Φ*G[1:n,n+1:2*n]
+    G = exp([-Fx Q; zeros(n, n) Fx'].*Δt)
+    Φ = transpose(G[n+1:2*n, n+1:2*n])
+    Qd = Φ*G[1:n, n+1:2*n]
 
     return Symmetric(Qd) #(Qd + transpose(Qd))/2
 end

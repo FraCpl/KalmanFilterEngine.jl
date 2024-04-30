@@ -267,7 +267,7 @@ function kalmanUpdateError!(nav::NavStateUD, t, y, h)
 
         # Update the state and covariance estimates for non-optimal K
         # (to be used with consider and underweighted gain instead of the optimal formula: P = P - K*Pyy*K')
-        if ~isRejected
+        if !isRejected
             K, nav.U, nav.D, α = carlsonUpdate(nav.U, nav.D, H[i, :], R[i, i])  # Kopt
 
             # Perform Agee-Turner rank-one update to account for consider states

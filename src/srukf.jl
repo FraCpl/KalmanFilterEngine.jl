@@ -92,7 +92,7 @@ function kalmanUpdate!(nav::NavStateSRUKF, t, y, h)
     isRejected = maximum(abs.(δz)) > nav.σᵣ     # σ rejection threshold
 
     # Update error state and covariance matrix
-    if ~isRejected
+    if !isRejected
         # Error state update
         K = (Pxy/Syy)/Syy'                  # Kalman Gain
         K[nav.ns+1:end, :] .= 0.0            # Consider states

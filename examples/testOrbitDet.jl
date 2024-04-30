@@ -11,8 +11,8 @@ using JTools
 # Define Navigation Problem
 f(t, x) = [x[4:6]; -3.986e14/norm(x[1:3])^3*x[1:3]]
 Jf(t, x) = ForwardDiff.jacobian(x -> f(t, x), x)
-rangeLosMeas(x) = [norm(x[1:3]); atan(x[2],x[1]); asin(x[3]/norm(x[1:3]))]
-h(t, x) = (rangeLosMeas(x), diagm([500; 0.01; 0.01].^2), ForwardDiff.jacobian(rangeLosMeas, x))  # ỹ, R, H
+rangeLosMeas(x) = [norm(x[1:3]); atan(x[2], x[1]); asin(x[3]/norm(x[1:3]))]
+h(t, x) = (rangeLosMeas(x), diagm([500; 0.001; 0.001].^2), ForwardDiff.jacobian(rangeLosMeas, x))  # ỹ, R, H
 
 # Define Kalman filter
 function kalmanFilter!(nav, Δt, ty, y, Q)
@@ -25,7 +25,7 @@ function kalmanFilter!(nav, Δt, ty, y, Q)
     end
 
     # Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
-    kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps = ceil(Int,Δt/10.0))
+    kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps = ceil(Int, Δt/10.0))
 end
 
 # Run
@@ -38,6 +38,7 @@ function main(;showplot=true)
     navUD = NavState(0.0, x̂₀, P₀; type=:UD)
     navUKF = NavState(0.0, x̂₀, P₀; type=:UKF)
     navSRUKF = NavState(0.0, x̂₀, P₀; type=:SRUKF)
+    navIEKF = NavState(0.0, x̂₀, P₀; iter=10)
 
     Δt = 100.0
     Q = computeQd([zeros(3,3) I; zeros(3,6)], [zeros(3,3); I], 0.01I, Δt)
@@ -48,6 +49,8 @@ function main(;showplot=true)
     X̂ud = [navUD.x̂]; σud = [getStd(navUD)];
     X̂ukf = [navUKF.x̂]; σukf = [getStd(navUKF)];
     X̂srukf = [navSRUKF.x̂]; σsrukf = [getStd(navSRUKF)]
+    X̂iekf = [navIEKF.x̂]; σiekf = [getStd(navIEKF)]
+
     for k in 1:100
         # Generate measurement at t[k]
         ty = (k - 1)*Δt
@@ -59,6 +62,7 @@ function main(;showplot=true)
         kalmanFilter!(navUD, Δt, ty, y, Q)
         kalmanFilter!(navUKF, Δt, ty, y, Q)
         kalmanFilter!(navSRUKF, Δt, ty, y, Q)
+        kalmanFilter!(navIEKF, Δt, ty, y, Q)
 
         # Propagate true dynamics from x[k] to x[k+1]
         sol = solve(ODEProblem((x, p, t) -> f(t, x), x, (0, Δt)))
@@ -72,10 +76,12 @@ function main(;showplot=true)
         push!(X̂ud, navUD.x̂)
         push!(X̂ukf, navUKF.x̂)
         push!(X̂srukf, navSRUKF.x̂)
+        push!(X̂iekf, navIEKF.x̂)
         push!(σ, getStd(nav))
         push!(σud, getStd(navUD))
         push!(σukf, getStd(navUKF))
         push!(σsrukf, getStd(navSRUKF))
+        push!(σiekf, getStd(navIEKF))
         #end
     end
 
@@ -97,10 +103,11 @@ function main(;showplot=true)
                 Axis(fig[2, 3]; xlabel="Time [s]", ylabel="vz [m/s]", limits=(T[1], T[end], nothing, nothing)),
             ]
         for i in 1:6
-            plotnav(axs[i], T, getindex.(X,i), getindex.(X̂,i), getindex.(σ,i); color=:blue)
-            plotnav(axs[i], T, getindex.(X,i), getindex.(X̂ud,i), getindex.(σud,i); color=:red)
-            plotnav(axs[i], T, getindex.(X,i), getindex.(X̂ukf,i), getindex.(σukf,i); color=:green)
-            plotnav(axs[i], T, getindex.(X,i), getindex.(X̂srukf,i), getindex.(σsrukf,i); color=:orange)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂, i), getindex.(σ, i); color=:blue)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ud, i), getindex.(σud, i); color=:red)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ukf, i), getindex.(σukf, i); color=:green)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂srukf, i), getindex.(σsrukf, i); color=:orange)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂iekf, i), getindex.(σiekf, i); color=:magenta)
         end
         display(fig)
     end

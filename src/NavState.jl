@@ -6,7 +6,7 @@ abstract type AbstractNavState end
 Build navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavState(t, x̂, P; type::Symbol=:EKF, α=1e-3, β=2.0, κ=0.0) :: AbstractNavState
+function NavState(t, x̂, P; type::Symbol=:EKF, α=1e-3, β=2.0, κ=0.0, iter=0) :: AbstractNavState
     if type == :SRUKF
         return NavStateSRUKF(t, x̂, P; α=α, β=β, κ=κ)
     elseif type == :UD || type == :UDEKF
@@ -14,5 +14,5 @@ function NavState(t, x̂, P; type::Symbol=:EKF, α=1e-3, β=2.0, κ=0.0) :: Abst
     elseif type == :UKF
         return NavStateUKF(t, x̂, P; α=α, β=β, κ=κ)
     end
-    return NavStateEKF(t, x̂, P)
+    return NavStateEKF(t, x̂, P; iter=iter)
 end

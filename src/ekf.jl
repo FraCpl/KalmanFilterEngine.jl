@@ -6,6 +6,7 @@ mutable struct NavStateEKF <: AbstractNavState
     ns::Int64               # Number of solve for (error) states
     σᵣ::Int64               # Outlier rejection threshold
     nδ::Int64               # Number of error states
+    iter::Int64             # Number of iterations for IEKF
 end
 
 """
@@ -14,9 +15,9 @@ end
 Build EKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateEKF(t, x̂, P)
+function NavStateEKF(t, x̂, P; iter=0)
     nδ = size(P, 1)
-    return NavStateEKF(t, x̂, P, zeros(nδ), nδ, 6, nδ)
+    return NavStateEKF(t, x̂, P, zeros(nδ), nδ, 6, nδ, iter)
 end
 
 """
@@ -98,7 +99,7 @@ function kalmanUpdateError!(nav::NavStateEKF, t, y, h)
     isRejected = maximum(abs.(δz)) > nav.σᵣ     # σ rejection threshold
 
     # Update error state and covariance matrix
-    if ~isRejected
+    if !isRejected
         # Error state update
         Ks = Pxy[1:nav.ns, :]/Pyy    # Kalman Gain
         nav.δx[1:nav.ns] += Ks*δy
@@ -121,9 +122,54 @@ measurement equation function ```ŷ, R, H = h(t, x̂)```. When using SRUKF or U
 measurement function only needs to provide ```ŷ``` and ```R``` as outputs.
 """
 function kalmanUpdate!(nav::NavStateEKF, t, y, h)
+    if nav.iter > 0
+        return kalmanUpdateIter!(nav, t, y, h)  # This is an IEKF
+    end
+
     δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
     nav.x̂ += nav.δx
     resetErrorState!(nav)
+
+    return δy, δz, isRejected
+end
+
+# This update routine implements an IKEF
+function kalmanUpdateIter!(nav::NavStateEKF, t, y, h)
+    # Estimated measurement and jacobians
+    ŷ, R, H = h(t, nav.x̂)
+    Pxy = nav.P*H'
+    Pyy = H*Pxy + R
+
+    # Measurement editing
+    δy = y - ŷ
+    δz = δy./sqrt.(diag(Pyy))                   # Normalized innovation
+    isRejected = maximum(abs.(δz)) > nav.σᵣ     # σ rejection threshold
+
+    # Update error state and covariance matrix
+    Ks = zeros(nav.ns, length(y))
+    if !isRejected
+        xIter = copy(nav.x̂)
+
+        # Start iterations
+        for i in 1:nav.iter
+            if i > 1
+                ŷ, R, H = h(t, xIter)
+                Pxy .= nav.P*H'
+                Pyy .= H*Pxy + R
+            end
+
+            # State update
+            Ks .= Pxy[1:nav.ns, :]/Pyy    # Kalman Gain
+            xIter[1:nav.ns] .= nav.x̂[1:nav.ns] + Ks*(y - ŷ - H*(nav.x̂ - xIter))
+        end
+
+        # Update state
+        nav.x̂ .= xIter
+
+        # Covariance update (non-optimal gain with consider states)
+        nav.P[1:nav.ns, :] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:end, :]']
+        nav.P[nav.ns+1:end, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:end]'
+    end
 
     return δy, δz, isRejected
 end

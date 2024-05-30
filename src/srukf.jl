@@ -57,7 +57,7 @@ function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Jf, Q; nSteps=1)
 end
 
 function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Q; nSteps=1)
-    kalmanPropagate!(nav, Δt, f, nothing, Q, nSteps = nSteps)
+    kalmanPropagate!(nav, Δt, f, nothing, Q; nSteps=nSteps)
 end
 
 function kalmanUpdate!(nav::NavStateSRUKF, t, y, h)

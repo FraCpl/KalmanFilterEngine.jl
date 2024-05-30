@@ -7,7 +7,7 @@ using LinearAlgebra
 using GLMakie
 using Random
 using JTools
-
+using ComponentArrays
 #=
 # Define Navigation Problem - OD1
 f(t, x) = [x[4:6]; -3.986e14/norm(x[1:3])^3*x[1:3]]
@@ -17,7 +17,7 @@ h(t, x) = (rangeLosMeas(x), diagm([500; 0.001; 0.001].^2), ForwardDiff.jacobian(
 =#
 
 # Define Navigation Problem - OD2
-f(t, x) = [x[4:6]; zeros(3)]
+f(t, x) = [x.vel; zeros(3)]
 Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
 h(t, x) = (x[1:3], diagm([10.0; 10.0; 10.0].^2), [I zeros(3, 3)])  # ỹ, R, H
 
@@ -31,16 +31,21 @@ end
 
 # Run
 function main(;showplot=true)
+    @warn "not working yet"
     Random.seed!(1234)
 
-    x̂₀ = [6370e3+500e3; 0.0; 0.0; 0.0; 1.1*sqrt(3.986e14/(6370e3+500e3)); 532.2]
-    P₀ = Diagonal([1.0e3; 1.0e3; 1.0e3; 1.0e2; 1.0e2; 1.0e2].^2)
+    x̂₀ = ComponentArray(
+        pos=[6370e3+500e3; 0.0; 0.0],
+        vel=[0.0; 1.1*sqrt(3.986e14/(6370e3+500e3)); 532.2],
+    )
+    P₀ = x̂₀*x̂₀'
+    P₀ .= Diagonal([1.0e3; 1.0e3; 1.0e3; 1.0e2; 1.0e2; 1.0e2].^2)
 
     nav = NavState(0.0, x̂₀, P₀)
-    navUD = NavState(0.0, x̂₀, P₀; type=:UD)
-    navUKF = NavState(0.0, x̂₀, P₀; type=:UKF)
-    navSRUKF = NavState(0.0, x̂₀, P₀; type=:SRUKF)
-    navIEKF = NavState(0.0, x̂₀, P₀; type=:IEKF)
+    #navUD = NavState(0.0, x̂₀, P₀; type=:UD)
+    #navUKF = NavState(0.0, x̂₀, P₀; type=:UKF)
+    #navSRUKF = NavState(0.0, x̂₀, P₀; type=:SRUKF)
+    #navIEKF = NavState(0.0, x̂₀, P₀; type=:IEKF)
 
     Δt = 100.0
     Q = computeQd([zeros(3,3) I; zeros(3, 6)], [zeros(3, 3); I], 0.01I, Δt)
@@ -48,10 +53,10 @@ function main(;showplot=true)
     x = nav.x̂ + rand(MvNormal(getCov(nav)))
     X = [x]; T = [0.0];
     X̂ = [nav.x̂]; σ = [getStd(nav)];
-    X̂ud = [navUD.x̂]; σud = [getStd(navUD)];
-    X̂ukf = [navUKF.x̂]; σukf = [getStd(navUKF)];
-    X̂srukf = [navSRUKF.x̂]; σsrukf = [getStd(navSRUKF)]
-    X̂iekf = [navIEKF.x̂]; σiekf = [getStd(navIEKF)]
+    #X̂ud = [navUD.x̂]; σud = [getStd(navUD)];
+    #X̂ukf = [navUKF.x̂]; σukf = [getStd(navUKF)];
+    #X̂srukf = [navSRUKF.x̂]; σsrukf = [getStd(navSRUKF)]
+    #X̂iekf = [navIEKF.x̂]; σiekf = [getStd(navIEKF)]
 
     for k in 1:100
         # Generate measurement at t[k]
@@ -61,10 +66,10 @@ function main(;showplot=true)
 
         # Perform Kalman Filter step, i.e., update x̂[k] and propagate to x̂[k+1]
         kalmanFilter!(nav, Δt, ty, y, Q)
-        kalmanFilter!(navUD, Δt, ty, y, Q)
-        kalmanFilter!(navUKF, Δt, ty, y, Q)
-        kalmanFilter!(navSRUKF, Δt, ty, y, Q)
-        kalmanFilter!(navIEKF, Δt, ty, y, Q)
+        #kalmanFilter!(navUD, Δt, ty, y, Q)
+        #kalmanFilter!(navUKF, Δt, ty, y, Q)
+        #kalmanFilter!(navSRUKF, Δt, ty, y, Q)
+        #kalmanFilter!(navIEKF, Δt, ty, y, Q)
 
         # Propagate true dynamics from x[k] to x[k+1]
         sol = solve(ODEProblem((x, p, t) -> f(t, x), x, (0, Δt)))
@@ -75,15 +80,15 @@ function main(;showplot=true)
         push!(T, nav.t)
         push!(X, x)
         push!(X̂, nav.x̂)
-        push!(X̂ud, navUD.x̂)
-        push!(X̂ukf, navUKF.x̂)
-        push!(X̂srukf, navSRUKF.x̂)
-        push!(X̂iekf, navIEKF.x̂)
+        #push!(X̂ud, navUD.x̂)
+        #push!(X̂ukf, navUKF.x̂)
+        #push!(X̂srukf, navSRUKF.x̂)
+        #push!(X̂iekf, navIEKF.x̂)
         push!(σ, getStd(nav))
-        push!(σud, getStd(navUD))
-        push!(σukf, getStd(navUKF))
-        push!(σsrukf, getStd(navSRUKF))
-        push!(σiekf, getStd(navIEKF))
+        #push!(σud, getStd(navUD))
+        #push!(σukf, getStd(navUKF))
+        #push!(σsrukf, getStd(navSRUKF))
+        #push!(σiekf, getStd(navIEKF))
         #end
     end
 
@@ -97,19 +102,19 @@ function main(;showplot=true)
         set_theme!(theme_fra())
         fig = Figure(size=(1100, 670))
         axs = [
-                Axis(fig[1, 1]; xlabel="Time [s]", ylabel="x [m]", limits=(T[1], T[end], nothing, nothing)),
-                Axis(fig[1, 2]; xlabel="Time [s]", ylabel="y [m]", title="Nav performance", limits=(T[1], T[end], nothing, nothing)),
-                Axis(fig[1, 3]; xlabel="Time [s]", ylabel="z [m]", limits=(T[1], T[end], nothing, nothing)),
-                Axis(fig[2, 1]; xlabel="Time [s]", ylabel="vx [m/s]", limits=(T[1], T[end], nothing, nothing)),
-                Axis(fig[2, 2]; xlabel="Time [s]", ylabel="vy [m/s]", limits=(T[1], T[end], nothing, nothing)),
-                Axis(fig[2, 3]; xlabel="Time [s]", ylabel="vz [m/s]", limits=(T[1], T[end], nothing, nothing)),
+                GLMakie.Axis(fig[1, 1]; xlabel="Time [s]", ylabel="x [m]", limits=(T[1], T[end], nothing, nothing)),
+                GLMakie.Axis(fig[1, 2]; xlabel="Time [s]", ylabel="y [m]", title="Nav performance", limits=(T[1], T[end], nothing, nothing)),
+                GLMakie.Axis(fig[1, 3]; xlabel="Time [s]", ylabel="z [m]", limits=(T[1], T[end], nothing, nothing)),
+                GLMakie.Axis(fig[2, 1]; xlabel="Time [s]", ylabel="vx [m/s]", limits=(T[1], T[end], nothing, nothing)),
+                GLMakie.Axis(fig[2, 2]; xlabel="Time [s]", ylabel="vy [m/s]", limits=(T[1], T[end], nothing, nothing)),
+                GLMakie.Axis(fig[2, 3]; xlabel="Time [s]", ylabel="vz [m/s]", limits=(T[1], T[end], nothing, nothing)),
             ]
         for i in 1:6
             plotnav(axs[i], T, getindex.(X, i), getindex.(X̂, i), getindex.(σ, i); color=:white)
-            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ud, i), getindex.(σud, i); color=:red)
-            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ukf, i), getindex.(σukf, i); color=:green)
-            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂srukf, i), getindex.(σsrukf, i); color=:orange)
-            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂iekf, i), getindex.(σiekf, i); color=:magenta)
+            #plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ud, i), getindex.(σud, i); color=:red)
+            #plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ukf, i), getindex.(σukf, i); color=:green)
+            #plotnav(axs[i], T, getindex.(X, i), getindex.(X̂srukf, i), getindex.(σsrukf, i); color=:orange)
+            #plotnav(axs[i], T, getindex.(X, i), getindex.(X̂iekf, i), getindex.(σiekf, i); color=:magenta)
         end
         display(fig)
     end

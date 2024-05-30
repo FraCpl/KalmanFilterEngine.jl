@@ -17,7 +17,7 @@ state and navigation covariance matrix.
 """
 function NavStateEKF(t, x̂, P; iter=0)
     nδ = size(P, 1)
-    return NavStateEKF(t, x̂, P, zeros(nδ), nδ, 6, nδ, iter)
+    return NavStateEKF(t, x̂, P, 0*P[:, 1], nδ, 6, nδ, iter)     # we do 0*P[:, 1] for compatibilty with ComponentArrays
 end
 
 """
@@ -32,16 +32,8 @@ getCov(nav::NavStateEKF) = nav.P
 # also computes the state transition matrix by numerical integration
 # of the Jacobian of the dynamics.
 @views function kalmanOde(t0, x0, Δt, f, Jf, nδ; nSteps=1)
-    # Append state transition matrix to state vector
-    nx = size(x0, 1)
-    x = [x0; Matrix(1.0I, nδ, nδ)[:]]
-    fun(t, x) = [f(t, x[1:nx]); Jf(t, x[1:nx])[:]]
-
-    # Call Runge-Kutta
-    x = odeCore(t0, x, Δt, fun; nSteps=nSteps)
-
-    # Output results
-    return t0 + Δt, x[1:nx], reshape(x[nx+1:end], nδ, nδ)  # t, x, Φ
+    x, Φ = odeCoreStm(t0, x0, Matrix(1.0I, nδ, nδ), Δt, f, Jf; nSteps=nSteps)
+    return t0 + Δt, x, Φ
 end
 
 # This is the Kalman filter propagation routine for a continuous time

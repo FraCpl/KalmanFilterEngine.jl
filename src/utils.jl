@@ -17,6 +17,30 @@ function odeCore(t0, x0, Δt, f; nSteps=1)
     return x
 end
 
+function odeCoreStm(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
+    t = copy(t0)
+    x = copy(x0)
+    Φ = copy(Φ0)
+    h = Δt/nSteps
+    for _ in 1:nSteps
+        K1 = h*f(t, x)
+        K2 = h*f(t + 1/3*h, x + K1/3)
+        K3 = h*f(t + 2/3*h, x - K1/3 + K2)
+        K4 = h*f(t + h, x + K1 - K2 + K3)
+
+        P1 = h*Jf(t, x)*Φ
+        P2 = h*Jf(t + 1/3*h, x + K1/3)*(Φ + P1/3)
+        P3 = h*Jf(t + 2/3*h, x - K1/3 + K2)*(Φ - P1/3 + P2)
+        P4 = h*Jf(t + h, x + K1 - K2 + K3)*(Φ + P1 - P2 + P3)
+
+        t += h
+        x .+= (K1 + 3K2 + 3K3 + K4)/8
+        Φ .+= (P1 + 3P2 + 3P3 + P4)/8
+    end
+
+    return x, Φ
+end
+
 """
     generatePosDefMatrix(n)
 

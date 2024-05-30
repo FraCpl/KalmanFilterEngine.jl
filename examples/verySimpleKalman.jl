@@ -38,6 +38,6 @@ for k in 1:100
 end
 
 # Plot results for 1st coordinate
-plot(T, getindex.(X,1) - getindex.(X̂,1), lab="Nav error", xlabel="Time [s]")
-plot!(T, +3.0*getindex.(σ,1); color=:red, lab="3σ")
-plot!(T, -3.0*getindex.(σ,1); color=:red, lab="")
+Plots.plot(T, getindex.(X,1) - getindex.(X̂,1), lab="Nav error", xlabel="Time [s]")
+Plots.plot!(T, +3.0*getindex.(σ,1); color=:red, lab="3σ")
+Plots.plot!(T, -3.0*getindex.(σ,1); color=:red, lab="")

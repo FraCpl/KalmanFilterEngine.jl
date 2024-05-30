@@ -5,7 +5,7 @@ using DifferentialEquations
 using Distributions
 using ForwardDiff
 using Plots#: plot!, plot, plotlyjs
-using KeplerianOrbits: KepOrbit, getOrbitState
+#using OrbitalMechanics: KepOrbit, getState
 #plotlyjs()
 #plotly()
 
@@ -87,7 +87,7 @@ function main()
     t = 0:Δt:Tof
 
     # Initial State
-    #x₀ = getOrbitState(KepOrbit(μ = μ, a = 2e3, e = 1.5, θ = -115.0*π/180))
+    #x₀ = getState(KepOrbit(μ = μ, a = 2e3, e = 1.5, θ = -115.0*π/180))
     x₀ = [-905.966704421432,-3049.30785605947,1090.04517280359,0.0370191439000898,0.00971259046629204,-0.0120961513397154] # Polimi
 
     # Initialize navigation

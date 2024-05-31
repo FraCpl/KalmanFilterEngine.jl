@@ -45,13 +45,13 @@ function main(;showplot=true)
     Δt = 100.0
     Q = computeQd([zeros(3,3) I; zeros(3, 6)], [zeros(3, 3); I], 0.01I, Δt)
 
-    x = nav.x̂ + rand(MvNormal(getCov(nav)))
+    x = nav.x + rand(MvNormal(getCov(nav)))
     X = [x]; T = [0.0];
-    X̂ = [nav.x̂]; σ = [getStd(nav)];
-    X̂ud = [navUD.x̂]; σud = [getStd(navUD)];
-    X̂ukf = [navUKF.x̂]; σukf = [getStd(navUKF)];
-    X̂srukf = [navSRUKF.x̂]; σsrukf = [getStd(navSRUKF)]
-    X̂iekf = [navIEKF.x̂]; σiekf = [getStd(navIEKF)]
+    X̂ = [nav.x]; σ = [getStd(nav)];
+    X̂ud = [navUD.x]; σud = [getStd(navUD)];
+    X̂ukf = [navUKF.x]; σukf = [getStd(navUKF)];
+    X̂srukf = [navSRUKF.x]; σsrukf = [getStd(navSRUKF)]
+    X̂iekf = [navIEKF.x]; σiekf = [getStd(navIEKF)]
 
     for k in 1:100
         # Generate measurement at t[k]
@@ -67,18 +67,18 @@ function main(;showplot=true)
         kalmanFilter!(navIEKF, Δt, ty, y, Q)
 
         # Propagate true dynamics from x[k] to x[k+1]
-        sol = solve(ODEProblem((x, p, t) -> f(t, x), x, (0, Δt)))
-        x = sol.u[end] + rand(MvNormal(Q))
+        #sol = solve(ODEProblem((x, p, t) -> f(t, x), x, (0, Δt)))
+        x = KalmanFilterEngine.odeCore(0, x, Δt, f; nSteps=1) + rand(MvNormal(Q))
 
         # Save data for post-processing
         #if showplot
         push!(T, nav.t)
         push!(X, x)
-        push!(X̂, nav.x̂)
-        push!(X̂ud, navUD.x̂)
-        push!(X̂ukf, navUKF.x̂)
-        push!(X̂srukf, navSRUKF.x̂)
-        push!(X̂iekf, navIEKF.x̂)
+        push!(X̂, nav.x)
+        push!(X̂ud, navUD.x)
+        push!(X̂ukf, navUKF.x)
+        push!(X̂srukf, navSRUKF.x)
+        push!(X̂iekf, navIEKF.x)
         push!(σ, getStd(nav))
         push!(σud, getStd(navUD))
         push!(σukf, getStd(navUKF))

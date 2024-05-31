@@ -33,7 +33,7 @@ for k in 1:100
     # Save for post-processing
     push!(T, nav.t)
     push!(X, x)
-    push!(X̂, nav.x̂)
+    push!(X̂, nav.x)
     push!(σ, getStd(nav))
 end
 

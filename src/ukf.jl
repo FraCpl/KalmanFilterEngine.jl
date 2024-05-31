@@ -1,27 +1,27 @@
 mutable struct NavStateUKF <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
-    x̂::Vector{Float64}      # Full estimated state, x̂[t]
-    P::Matrix{Float64}      # Covariance matrix P[t]
+    x#::Vector{Float64}      # Full estimated state, x[t]
+    P#::Matrix{Float64}      # Covariance matrix P[t]
     ns::Int64               # Number of solve for states
     σᵣ::Int64               # Outlier rejection threshold
     γ::Float64              # UKF parameters
     Wm::Vector{Float64}     # UKF parameters
     Wc::Vector{Float64}     # UKF parameters
     L::Int64                    # Length of state vector
-    X̂::Vector{Vector{Float64}}  # Sigma point states
+    X::Vector{Vector{Float64}}  # Sigma point states
 end
 
 """
-    NavStateUKF(t, x̂, P)
+    NavStateUKF(t, x, P)
 
 Build UKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateUKF(t, x̂, P; α=1e-3, β=2.0, κ=0.0)
-    L = size(x̂, 1)
+function NavStateUKF(t, x, P; α=1e-3, β=2.0, κ=0.0)
+    L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
 
-    return NavStateUKF(t, x̂, P, L, 6, γ, Wm, Wc, L, [zeros(L) for _ in 1:2L+1])
+    return NavStateUKF(t, x, P, L, 6, γ, Wm, Wc, L, [zeros(L) for _ in 1:2L+1])
 end
 
 function getCov(nav::NavStateUKF)
@@ -43,9 +43,9 @@ end
 
 function computeSigmaPoints!(nav::NavStateUKF)
     S = sqrt(nav.P)
-    nav.X̂[1] = nav.x̂
-    nav.X̂[2:nav.L+1] = [nav.x̂ + nav.γ*S[i,:] for i in 1:nav.L]
-    nav.X̂[nav.L+2:end] = [nav.x̂ - nav.γ*S[i,:] for i in 1:nav.L]
+    nav.X[1] = nav.x
+    nav.X[2:nav.L+1] = [nav.x + nav.γ*S[i,:] for i in 1:nav.L]
+    nav.X[nav.L+2:end] = [nav.x - nav.γ*S[i,:] for i in 1:nav.L]
 end
 
 function kalmanPropagate!(nav::NavStateUKF, Δt, f, Jf, Q; nSteps=1)
@@ -53,16 +53,16 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f, Jf, Q; nSteps=1)
     computeSigmaPoints!(nav)
 
     # Propagate sigma points
-    nav.X̂ = odeCore.(nav.t, nav.X̂, Δt, f; nSteps=nSteps)
+    nav.X = odeCore.(nav.t, nav.X, Δt, f; nSteps=nSteps)
     nav.t = nav.t + Δt
 
     # Compute mean state
-    nav.x̂ = sum(nav.Wm.*nav.X̂)
+    nav.x = sum(nav.Wm.*nav.X)
 
     # Compute covariance estimate
     nav.P = copy(Q)
     for i in 1:2*nav.L+1
-        δX = nav.X̂[i] - nav.x̂
+        δX = nav.X[i] - nav.x
         nav.P += nav.Wc[i].*δX*δX'
     end
 end
@@ -76,7 +76,7 @@ function kalmanUpdate!(nav::NavStateUKF, t, y, h)
     computeSigmaPoints!(nav)
 
     # Compute mean estimated measurement
-    out = h.(t, nav.X̂)
+    out = h.(t, nav.X)
     Ŷ = getindex.(out, 1)
     ŷ = sum(nav.Wm.*Ŷ)
 
@@ -85,7 +85,7 @@ function kalmanUpdate!(nav::NavStateUKF, t, y, h)
     Pyy = getindex.(out, 2)[1]   # R
     for i in 1:2*nav.L+1
         δY = Ŷ[i] - ŷ
-        δX = nav.X̂[i] - nav.x̂
+        δX = nav.X[i] - nav.x
         Pyy += nav.Wc[i].*δY*δY'
         Pxy += nav.Wc[i].*δX*δY'
     end
@@ -99,7 +99,7 @@ function kalmanUpdate!(nav::NavStateUKF, t, y, h)
     if !isRejected
         # Error state update
         Ks = Pxy[1:nav.ns,:]/Pyy     # Kalman Gain
-        nav.x̂[1:nav.ns] += Ks*δy
+        nav.x[1:nav.ns] += Ks*δy
 
         # Covariance update (non-optimal gain with consider states)
         nav.P[1:nav.ns,:] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:end,:]']

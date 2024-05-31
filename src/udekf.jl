@@ -1,24 +1,24 @@
 mutable struct NavStateUD <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
-    x̂::Vector{Float64}      # Full estimated state, x̂[t]
-    U::Matrix{Float64}      # Covariance Matrix UD, U[t]
-    D::Vector{Float64}      # Covariance Matrix UD, D[t]
-    δx::Vector{Float64}     # Error state, δx[t]
+    x#::Vector{Float64}      # Full estimated state, x[t]
+    U#::Matrix{Float64}      # Covariance Matrix UD, U[t]
+    D#::Vector{Float64}      # Covariance Matrix UD, D[t]
+    δx#::Vector{Float64}     # Error state, δx[t]
     ns::Int64               # Number of solve for (error) states
     σᵣ::Int64               # Outlier rejection threshold
     nδ::Int64               # Number of error states
 end
 
 """
-    NavStateUD(t, x̂, P)
+    NavStateUD(t, x, P)
 
 Build UDEKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateUD(t, x̂, P)
+function NavStateUD(t, x, P)
     U, D = UD(P)
     nδ = size(U, 1)
-    return NavStateUD(t, x̂, U, D, zeros(nδ), nδ, 6, nδ)
+    return NavStateUD(t, x, U, D, 0*P[:, 1], nδ, 6, nδ)
 end
 
 getCov(nav::NavStateUD) = nav.U*diagm(nav.D)*nav.U'
@@ -162,8 +162,8 @@ function modGramSchmidtReduced(Φ, U, D)
 end
 
 function kalmanPropagate!(nav::NavStateUD, Δt, f, Jf, Q; nSteps=1)
-    nav.t, nav.x̂, Φ = kalmanOde(nav.t, nav.x̂, Δt, f, Jf, nav.nδ; nSteps=nSteps)
-    nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, size(nav.x̂,1))
+    nav.t, nav.x, Φ = kalmanOde(nav.t, nav.x, Δt, f, Jf, nav.nδ; nSteps=nSteps)
+    nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, size(nav.x,1))
 end
 
 function kalmanPropagate!(nav::NavStateUD, Δt, f, Q; nSteps=1)
@@ -244,7 +244,7 @@ end
 
 function kalmanUpdateError!(nav::NavStateUD, t, y, h)
     # Estimated measurement and jacobians
-    ŷ, R, H = h(t, nav.x̂)
+    ŷ, R, H = h(t, nav.x)
 
     # Decorrelate measurement if R is not diagonal
     if ~isdiag(R)
@@ -284,7 +284,7 @@ end
 
 function kalmanUpdate!(nav::NavStateUD, t, y, h)
     δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
-    nav.x̂ .+= nav.δx
+    nav.x .+= nav.δx
     resetErrorState!(nav)
     return δy, δz, isRejected
 end

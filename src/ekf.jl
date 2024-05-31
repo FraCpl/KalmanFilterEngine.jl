@@ -1,8 +1,8 @@
 mutable struct NavStateEKF <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
-    x̂::Vector{Float64}      # Full estimated state, x̂[t]
-    P::Matrix{Float64}      # Covariance Matrix, P[t]
-    δx::Vector{Float64}     # Error state, δx[t]
+    x#::Vector{Float64}      # Full estimated state, x[t]
+    P#::Matrix{Float64}      # Covariance Matrix, P[t]
+    δx#::Vector{Float64}     # Error state, δx[t]
     ns::Int64               # Number of solve for (error) states
     σᵣ::Int64               # Outlier rejection threshold
     nδ::Int64               # Number of error states
@@ -10,14 +10,14 @@ mutable struct NavStateEKF <: AbstractNavState
 end
 
 """
-    NavStateEKF(t, x̂, P)
+    NavStateEKF(t, x, P)
 
 Build EKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateEKF(t, x̂, P; iter=0)
+function NavStateEKF(t, x, P; iter=0)
     nδ = size(P, 1)
-    return NavStateEKF(t, x̂, P, 0*P[:, 1], nδ, 6, nδ, iter)     # we do 0*P[:, 1] for compatibilty with ComponentArrays
+    return NavStateEKF(t, x, P, 0*P[:, 1], nδ, 6, nδ, iter)     # we do 0*P[:, 1] for compatibilty with ComponentArrays
 end
 
 """
@@ -32,7 +32,7 @@ getCov(nav::NavStateEKF) = nav.P
 # also computes the state transition matrix by numerical integration
 # of the Jacobian of the dynamics.
 @views function kalmanOde(t0, x0, Δt, f, Jf, nδ; nSteps=1)
-    x, Φ = odeCoreStm(t0, x0, Matrix(1.0I, nδ, nδ), Δt, f, Jf; nSteps=nSteps)
+    x, Φ = odeCore(t0, x0, Matrix(1.0I, nδ, nδ), Δt, f, Jf; nSteps=nSteps)
     return t0 + Δt, x, Φ
 end
 
@@ -51,7 +51,7 @@ number of RK4 steps to be performed when numerically integrating the system's
 dynamics. This function is only applicable to EKF and UDEKF.
 """
 function kalmanPropagate!(nav::NavStateEKF, Δt, f, Jf, Q; nSteps=1)
-    nav.t, nav.x̂, Φ = kalmanOde(nav.t, nav.x̂, Δt, f, Jf, nav.nδ; nSteps=nSteps)
+    nav.t, nav.x, Φ = kalmanOde(nav.t, nav.x, Δt, f, Jf, nav.nδ; nSteps=nSteps)
     nav.P = Φ*nav.P*Φ' + Q
 end
 
@@ -76,12 +76,12 @@ end
 Update error state of the Kalman filter using the input measurement.
 
 Inputs include the measurement time ```t```, measurement ```y```,
-measurement equation function ```ŷ, R, H = h(t, x̂)```. This function is only applicable
+measurement equation function ```ŷ, R, H = h(t, x)```. This function is only applicable
 to EKF and UDEKF.
 """
 function kalmanUpdateError!(nav::NavStateEKF, t, y, h)
     # Estimated measurement and jacobians
-    ŷ, R, H = h(t, nav.x̂)
+    ŷ, R, H = h(t, nav.x)
     Pxy = nav.P*H'
     Pyy = H*Pxy + R
 
@@ -110,7 +110,7 @@ end
 Update state of the Kalman filter using the input measurement.
 
 Inputs include the measurement time ```t```, measurement ```y```,
-measurement equation function ```ŷ, R, H = h(t, x̂)```. When using SRUKF or UKF, the
+measurement equation function ```ŷ, R, H = h(t, x)```. When using SRUKF or UKF, the
 measurement function only needs to provide ```ŷ``` and ```R``` as outputs.
 """
 function kalmanUpdate!(nav::NavStateEKF, t, y, h)
@@ -119,7 +119,7 @@ function kalmanUpdate!(nav::NavStateEKF, t, y, h)
     end
 
     δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
-    nav.x̂ .+= nav.δx
+    nav.x .+= nav.δx
     resetErrorState!(nav)
 
     return δy, δz, isRejected
@@ -128,7 +128,7 @@ end
 # This update routine implements an IKEF
 function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter)
     # Estimated measurement and jacobians
-    ŷ, R, H = h(t, nav.x̂)
+    ŷ, R, H = h(t, nav.x)
     Pxy = nav.P*H'
     Pyy = H*Pxy + R
 
@@ -140,7 +140,7 @@ function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter)
     # Update error state and covariance matrix
     Ks = zeros(nav.ns, length(y))
     if !isRejected
-        xIter = copy(nav.x̂)
+        xIter = copy(nav.x)
 
         # Start iterations
         for i in 1:iter
@@ -152,11 +152,11 @@ function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter)
 
             # State update
             Ks .= Pxy[1:nav.ns, :]/Pyy    # Kalman Gain
-            xIter[1:nav.ns] .= nav.x̂[1:nav.ns] + Ks*(y - ŷ - H*(nav.x̂ - xIter))
+            xIter[1:nav.ns] .= nav.x[1:nav.ns] + Ks*(y - ŷ - H*(nav.x - xIter))
         end
 
         # Update state
-        nav.x̂ .= xIter
+        nav.x .= xIter
 
         # Covariance update (non-optimal gain with consider states)
         nav.P[1:nav.ns, :] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:end, :]']

@@ -17,7 +17,7 @@ function odeCore(t0, x0, Δt, f; nSteps=1)
     return x
 end
 
-function odeCoreStm(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
+function odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
     t = copy(t0)
     x = copy(x0)
     Φ = copy(Φ0)

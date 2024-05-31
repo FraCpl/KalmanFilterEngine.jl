@@ -46,7 +46,7 @@ function kalmanFilter!(nav, Δt, ty, y, Q, q1_IB)
     end
 
     # Latch state at t[k-1]
-    nav.x̂[7:9] = nav.x̂[1:3]
+    nav.x[7:9] = nav.x[1:3]
     H = [I zeros(6,3); I zeros(3,6)]
     nav.P = H*nav.P*transpose(H)
 
@@ -84,7 +84,7 @@ function main()
     # Run navigation
     x = [x₀; x₀]
     X = [x[1:6]]; T = [t[1]]
-    X̂ = [nav.x̂]; σ = [getStd(nav)];
+    X̂ = [nav.x]; σ = [getStd(nav)];
     dummy, R, ~ = h(zeros(9), zeros(4), 0.0, 0.0)
 
     for k = 1:lastindex(t)
@@ -105,7 +105,7 @@ function main()
         # Save data for post-processing
         push!(T, T[end] + Δt)
         push!(X, x[1:6])
-        push!(X̂, nav.x̂)
+        push!(X̂, nav.x)
         push!(σ, getStd(nav))
     end
 

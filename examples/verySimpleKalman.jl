@@ -14,7 +14,7 @@ h(t, x) = (x[1:3], R, [I zeros(3, 3)])          # Measurement equation
 # Initialize navigation state
 P₀ = generatePosDefMatrix(6)            # Initial state uncertainty covariance
 x̂₀ = x₀ + rand(MvNormal(P₀))            # Initial estimated state
-nav = NavState(0.0, x̂₀, P₀; type=:SRUKF)
+nav = NavState(0.0, x̂₀, P₀; type=:UDEKF)
 
 # Simulate Kalman filter
 T = []; X = []; X̂ = []; σ = []

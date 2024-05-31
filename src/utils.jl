@@ -6,10 +6,10 @@ function odeCore(t0, x0, Δt, f; nSteps=1)
     h = Δt/nSteps
     K1 = similar(x0); K2 = similar(x0); K3 = similar(x0); K4 = similar(x0)
     for _ in 1:nSteps
-        K1 .= h*f(t, x)
-        K2 .= h*f(t + 1/3*h, x + K1/3)
-        K3 .= h*f(t + 2/3*h, x - K1/3 + K2)
-        K4 .= h*f(t + h, x + K1 - K2 + K3)
+        K1 .= h.*f(t, x)
+        K2 .= h.*f(t + 1/3*h, x + K1/3)
+        K3 .= h.*f(t + 2/3*h, x - K1/3 + K2)
+        K4 .= h.*f(t + h, x + K1 - K2 + K3)
         t += h
         x .+= (K1 + 3K2 + 3K3 + K4)/8
     end
@@ -23,15 +23,15 @@ function odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
     Φ = copy(Φ0)
     h = Δt/nSteps
     for _ in 1:nSteps
-        K1 = h*f(t, x)
-        K2 = h*f(t + 1/3*h, x + K1/3)
-        K3 = h*f(t + 2/3*h, x - K1/3 + K2)
-        K4 = h*f(t + h, x + K1 - K2 + K3)
+        K1 = h.*f(t, x)
+        K2 = h.*f(t + 1/3*h, x + K1/3)
+        K3 = h.*f(t + 2/3*h, x - K1/3 + K2)
+        K4 = h.*f(t + h, x + K1 - K2 + K3)
 
-        P1 = h*Jf(t, x)*Φ
-        P2 = h*Jf(t + 1/3*h, x + K1/3)*(Φ + P1/3)
-        P3 = h*Jf(t + 2/3*h, x - K1/3 + K2)*(Φ - P1/3 + P2)
-        P4 = h*Jf(t + h, x + K1 - K2 + K3)*(Φ + P1 - P2 + P3)
+        P1 = h.*Jf(t, x)*Φ
+        P2 = h.*Jf(t + 1/3*h, x + K1/3)*(Φ + P1/3)
+        P3 = h.*Jf(t + 2/3*h, x - K1/3 + K2)*(Φ - P1/3 + P2)
+        P4 = h.*Jf(t + h, x + K1 - K2 + K3)*(Φ + P1 - P2 + P3)
 
         t += h
         x .+= (K1 + 3K2 + 3K3 + K4)/8

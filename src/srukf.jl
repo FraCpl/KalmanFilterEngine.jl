@@ -8,7 +8,7 @@ mutable struct NavStateSRUKF <: AbstractNavState
     Wm::Vector{Float64}     # UKF parameters
     Wc::Vector{Float64}     # UKF parameters
     L::Int64                    # Length of state vector
-    X::Vector{Vector{Float64}}  # Sigma point states
+    X#::Vector{Vector{Float64}}  # Sigma point states
 end
 
 """
@@ -22,7 +22,7 @@ function NavStateSRUKF(t, x, P; α=1e-3, β=2.0, κ=0.0)
     L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
 
-    return NavStateSRUKF(t, x, S, L, 6, γ, Wm, Wc, L, [zeros(L) for _ in 1:2L+1])
+    return NavStateSRUKF(t, x, S, L, 6, γ, Wm, Wc, L, [0*x for _ in 1:2L+1])
 end
 
 getCov(nav::NavStateSRUKF) = nav.S'*nav.S

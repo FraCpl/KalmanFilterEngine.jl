@@ -7,7 +7,6 @@ mutable struct NavStateEKF <: AbstractNavState
     σᵣ::Int64               # Outlier rejection threshold
     nδ::Int64               # Number of error states
     iter::Int64             # Number of iterations for IEKF
-
 end
 
 """

@@ -30,21 +30,20 @@ end
 
 # Run
 function main(;showplot=true)
-    @warn "not working yet"
-    Random.seed!(1234)
+    #Random.seed!(1234)
 
     x̂₀ = ComponentArray(
         pos=[6370e3+500e3; 0.0; 0.0],
         vel=[0.0; 1.1*sqrt(3.986e14/(6370e3+500e3)); 532.2],
     )
     P₀ = x̂₀*x̂₀'
-    P₀ .= Diagonal([1.0e3; 1.0e3; 1.0e3; 1.0e2; 1.0e2; 1.0e2].^2)
+    P₀ .= Diagonal([1.0e2; 1.0e2; 1.0e2; 1.0e2; 1.0e2; 1.0e2].^2)
 
     nav = NavState(0.0, x̂₀, P₀)
     navUD = NavState(0.0, x̂₀, P₀; type=:UD)
-    #navUKF = NavState(0.0, x̂₀, P₀; type=:UKF)
-    #navSRUKF = NavState(0.0, x̂₀, P₀; type=:SRUKF)
-    #navIEKF = NavState(0.0, x̂₀, P₀; type=:IEKF)
+    navUKF = NavState(0.0, x̂₀, P₀; type=:UKF)
+    navSRUKF = NavState(0.0, x̂₀, P₀; type=:SRUKF)
+    navIEKF = NavState(0.0, x̂₀, P₀; type=:IEKF)
 
     Δt = 100.0
     Q = computeQd([zeros(3,3) I; zeros(3, 6)], [zeros(3, 3); I], 0.01I, Δt)
@@ -53,9 +52,9 @@ function main(;showplot=true)
     X = [x]; T = [0.0];
     X̂ = [nav.x]; σ = [getStd(nav)];
     X̂ud = [navUD.x]; σud = [getStd(navUD)];
-    #X̂ukf = [navUKF.x]; σukf = [getStd(navUKF)];
-    #X̂srukf = [navSRUKF.x]; σsrukf = [getStd(navSRUKF)]
-    #X̂iekf = [navIEKF.x]; σiekf = [getStd(navIEKF)]
+    X̂ukf = [navUKF.x]; σukf = [getStd(navUKF)];
+    X̂srukf = [navSRUKF.x]; σsrukf = [getStd(navSRUKF)]
+    X̂iekf = [navIEKF.x]; σiekf = [getStd(navIEKF)]
 
     for k in 1:100
         # Generate measurement at t[k]
@@ -66,15 +65,12 @@ function main(;showplot=true)
         # Perform Kalman Filter step, i.e., update x̂[k] and propagate to x̂[k+1]
         kalmanFilter!(nav, Δt, ty, y, Q)
         kalmanFilter!(navUD, Δt, ty, y, Q)
-        #kalmanFilter!(navUKF, Δt, ty, y, Q)
-        #kalmanFilter!(navSRUKF, Δt, ty, y, Q)
-        #kalmanFilter!(navIEKF, Δt, ty, y, Q)
+        kalmanFilter!(navUKF, Δt, ty, y, Q)
+        kalmanFilter!(navSRUKF, Δt, ty, y, Q)
+        kalmanFilter!(navIEKF, Δt, ty, y, Q)
 
         # Propagate true dynamics from x[k] to x[k+1]
-        #sol = solve(ODEProblem((x, p, t) -> f(t, x), x, (0, Δt)))
-        #x = sol.u[end] + rand(MvNormal(Q))
         x = KalmanFilterEngine.odeCore(0, x, Δt, f; nSteps=1) + rand(MvNormal(Q))
-
 
         # Save data for post-processing
         #if showplot
@@ -84,12 +80,12 @@ function main(;showplot=true)
         push!(σ, getStd(nav))
         push!(X̂ud, navUD.x)
         push!(σud, getStd(navUD))
-        #push!(X̂ukf, navUKF.x)
-        #push!(σukf, getStd(navUKF))
-        #push!(X̂srukf, navSRUKF.x)
-        #push!(σsrukf, getStd(navSRUKF))
-        #push!(X̂iekf, navIEKF.x)
-        #push!(σiekf, getStd(navIEKF))
+        push!(X̂ukf, navUKF.x)
+        push!(σukf, getStd(navUKF))
+        push!(X̂srukf, navSRUKF.x)
+        push!(σsrukf, getStd(navSRUKF))
+        push!(X̂iekf, navIEKF.x)
+        push!(σiekf, getStd(navIEKF))
         #end
     end
 
@@ -113,9 +109,9 @@ function main(;showplot=true)
         for i in 1:6
             plotnav(axs[i], T, getindex.(X, i), getindex.(X̂, i), getindex.(σ, i); color=:white)
             plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ud, i), getindex.(σud, i); color=:red)
-            #plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ukf, i), getindex.(σukf, i); color=:green)
-            #plotnav(axs[i], T, getindex.(X, i), getindex.(X̂srukf, i), getindex.(σsrukf, i); color=:orange)
-            #plotnav(axs[i], T, getindex.(X, i), getindex.(X̂iekf, i), getindex.(σiekf, i); color=:magenta)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ukf, i), getindex.(σukf, i); color=:green)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂srukf, i), getindex.(σsrukf, i); color=:orange)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂iekf, i), getindex.(σiekf, i); color=:magenta)
         end
         display(fig)
     end

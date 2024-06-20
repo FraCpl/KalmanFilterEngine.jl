@@ -1,3 +1,5 @@
+# Author: F. Capolupo
+# European Space Agency, 2024
 module KalmanFilterEngine
 
 using LinearAlgebra, ForwardDiff

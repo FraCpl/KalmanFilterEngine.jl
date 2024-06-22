@@ -74,7 +74,7 @@ function TEST_kalmanOde()
 
     Torb = 2π*sqrt(sma^3/μ)
 
-    f(x,μ) = [x[4:6]; -μ/norm(x[1:3])^3*x[1:3]]
+    f(x, μ) = [x[4:6]; -μ/norm(x[1:3])^3*x[1:3]]
     x = KalmanFilterEngine.odeCore(0.0, x0, Torb, (t,x) -> f(x,μ); nSteps=ceil(Int,Torb/1.0))
 
     return norm(x[1:3] - x0[1:3]) < 100.0
@@ -91,6 +91,21 @@ function TEST_UDpropagate1()
     Q = diagm(abs.(randn(n)))
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
     return maximum(abs.(Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Q)))
+end
+
+function TEST_kalmanOdeSTM()
+    f(t, x) = [x[4:6]; zeros(3)]
+    Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
+
+    t0 = 3.0
+    x0 = [randn(3); randn(3)]
+    Φ0 = Matrix(1.0I, 6, 6)
+    Δt = 3.760
+    @time x, Φ = KalmanFilterEngine.odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
+    xTrue = [x0[1:3] + x0[4:6]*Δt; x0[4:6]]
+    ΦTrue = I + [zeros(3, 3) Δt*I; zeros(3, 6)]
+
+    return max(maximum(abs.(xTrue - x)), maximum(abs.(ΦTrue - Φ)))
 end
 
 function TEST_UDpropagate2()
@@ -220,7 +235,7 @@ function TEST_simpleKalman(type::Symbol)
         y = H*x + rand(MvNormal(R))     # Generate measurement
         klm!(nav, y)                    # Execute Kalman step
         x̂, P = klmSimple(x̂, P, y)       # Execute Kalman step (simple)
-        ε = maximum([ε maximum(abs.(nav.x̂ - x̂)) maximum(abs.(getCov(nav) - P))])    # Error
+        ε = maximum([ε maximum(abs.(nav.x - x̂)) maximum(abs.(getCov(nav) - P))])    # Error
         x = Φ*x + rand(MvNormal(Q))     # Propagate state
     end
 
@@ -236,6 +251,7 @@ end
     @test TEST_carlsonUpdate() < ERR_TOL
     @test TEST_modGramSchmidt() < ERR_TOL
     @test TEST_kalmanOde()
+    @test TEST_kalmanOdeSTM() < ERR_TOL
     @test TEST_UDpropagate1() < ERR_TOL
     @test TEST_UDpropagate2() < ERR_TOL
     @test TEST_UDpropagate2b() < ERR_TOL

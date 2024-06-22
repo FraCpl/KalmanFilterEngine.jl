@@ -31,7 +31,7 @@ getCov(nav::NavStateEKF) = nav.P
 # time to the current time plus Δt using a Runge-Kutta algorithm. It
 # also computes the state transition matrix by numerical integration
 # of the Jacobian of the dynamics.
-@views function kalmanOde(t0, x0, Δt, f, Jf, nδ; nSteps=1)
+function kalmanOde(t0, x0, Δt, f, Jf, nδ; nSteps=1)
     x, Φ = odeCore(t0, x0, Matrix(1.0I, nδ, nδ), Δt, f, Jf; nSteps=nSteps)
     return t0 + Δt, x, Φ
 end
@@ -79,9 +79,10 @@ Inputs include the measurement time ```t```, measurement ```y```,
 measurement equation function ```ŷ, R, H = h(t, x)```. This function is only applicable
 to EKF and UDEKF.
 """
-function kalmanUpdateError!(nav::NavStateEKF, t, y, h)
+@views function kalmanUpdateError!(nav::NavStateEKF, t, y, h)
     # Estimated measurement and jacobians
     ŷ, R, H = h(t, nav.x)
+    if isdiag(R); return kalmanUpdateErrorScalar!(nav, y, ŷ, R, H); end
     Pxy = nav.P*H'
     Pyy = H*Pxy + R
 
@@ -97,8 +98,38 @@ function kalmanUpdateError!(nav::NavStateEKF, t, y, h)
         nav.δx[1:nav.ns] += Ks*δy
 
         # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns, :] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:end, :]']
-        nav.P[nav.ns+1:end, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:end]'
+        nav.P[1:nav.ns, :] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:nav.nδ, :]']
+        nav.P[nav.ns+1:nav.nδ, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:nav.nδ]'
+    end
+
+    return δy, δz, isRejected
+end
+
+# Scalar measurement update for EKF
+@views function kalmanUpdateErrorScalar!(nav::NavStateEKF, y, ŷ, R, H)
+    δy = similar(y); δz = similar(y)
+    isRejected = false
+
+    for i in eachindex(y)
+        # Estimated measurement and jacobians
+        Pxy = nav.P*H[i, :]
+        Pyy = H[i, :]'*Pxy + R[i, i]
+
+        # Measurement editing
+        δy[i] = y[i] - (ŷ[i] + H[i, :]'*nav.δx)
+        δz[i] = δy[i]/sqrt(Pyy)                     # Normalized innovation
+        isRejected = abs(δz[i]) > nav.σᵣ            # σ rejection threshold
+
+        # Update error state and covariance matrix
+        if !isRejected
+            # Error state update
+            Ks = Pxy[1:nav.ns, :]/Pyy    # Kalman Gain
+            nav.δx[1:nav.ns] += Ks*δy[i]
+
+            # Covariance update (non-optimal gain with consider states)
+            nav.P[1:nav.ns, :] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:nav.nδ, :]']
+            nav.P[nav.ns+1:nav.nδ, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:nav.nδ]'
+        end
     end
 
     return δy, δz, isRejected
@@ -126,7 +157,7 @@ function kalmanUpdate!(nav::NavStateEKF, t, y, h)
 end
 
 # This update routine implements an IKEF
-function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter)
+@views function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter)
     # Estimated measurement and jacobians
     ŷ, R, H = h(t, nav.x)
     Pxy = nav.P*H'
@@ -159,8 +190,8 @@ function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter)
         nav.x .= xIter
 
         # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns, :] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:end, :]']
-        nav.P[nav.ns+1:end, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:end]'
+        nav.P[1:nav.ns, :] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:nav.nδ, :]']
+        nav.P[nav.ns+1:nav.nδ, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:nav.nδ]'
     end
 
     return δy, δz, isRejected

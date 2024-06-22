@@ -21,7 +21,6 @@ f(t, x) = [x[4:6]; zeros(3)]
 Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
 h(t, x) = (x[1:3], diagm([10.0; 10.0; 10.0].^2), [I zeros(3, 3)])  # ỹ, R, H
 
-
 # Define Kalman filter
 function kalmanFilter!(nav, Δt, ty, y, Q)
     kalmanUpdate!(nav, ty, y, h)                                        # Update step at t[k-1] with y[k-1]

@@ -23,7 +23,7 @@ end
 
 getCov(nav::NavStateUD) = nav.U*diagm(nav.D)*nav.U'
 
-function UD(P)
+@views function UD(P)
     n = size(P, 1)
     U = Matrix(1.0I, n, n)
     D = zeros(n)
@@ -49,7 +49,7 @@ end
 # D must be provided as a vector.
 # c is a positive scalar.
 # x is a vector.
-function ageeTurnerUpdate(U, D, c, x)
+@views function ageeTurnerUpdate(U, D, c, x)
     if c > 0
         xx = copy(x)
         n = length(D)
@@ -80,7 +80,7 @@ end
 #
 # It also provides
 # alpha = H*Ū*D̄*Ū'*H' + R
-function carlsonUpdate(Ū, D̄, H, R)
+@views function carlsonUpdate(Ū, D̄, H, R)
     n = length(D̄)
     K̄ = zeros(n)
     D = zeros(n)
@@ -114,7 +114,7 @@ end
 #
 # Q must be diagonal (and provided as a vector)
 # D must be provided as a vector
-function modGramSchmidt(Φ, U, D, Φw, Q)
+@views function modGramSchmidt(Φ, U, D, Φw, Q)
     n = size(Φ, 1)
     Ū = Matrix(1.0I, n, n)
     D̄ = zeros(n)
@@ -139,7 +139,7 @@ end
 # Ubar*Dbar*Ubar' = Phi*U*D*U'*Phi'
 #
 # D must be provided as a vector
-function modGramSchmidtReduced(Φ, U, D)
+@views function modGramSchmidtReduced(Φ, U, D)
     n = size(Φ,1)
     Ū = Matrix(1.0I, n, n)
     D̄ = zeros(n)
@@ -163,7 +163,7 @@ end
 
 function kalmanPropagate!(nav::NavStateUD, Δt, f, Jf, Q; nSteps=1)
     nav.t, nav.x, Φ = kalmanOde(nav.t, nav.x, Δt, f, Jf, nav.nδ; nSteps=nSteps)
-    nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, size(nav.x,1))
+    nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, size(nav.x, 1))
 end
 
 function kalmanPropagate!(nav::NavStateUD, Δt, f, Q; nSteps=1)
@@ -181,7 +181,8 @@ end
 # Φpp of non correlated states must be diagonal
 # Q of non correlated states must be diagonal (Qpp diagonal and Qxp = 0)
 function UDpropagate(U, D, Φ, Q, nc)
-    np = size(Φ,1) - nc       # Number of parameters (i.e., non correlated states)
+    nδ = size(Φ, 1)
+    np = nδ - nc       # Number of parameters (i.e., non correlated states)
 
     # Solve first sub-problem
     Φxx = Φ[1:nc, 1:nc]
@@ -220,19 +221,19 @@ function UDpropagate(U, D, Φ, Q, nc)
         return Ũxx, D̃xx
     end
 
-    Ũ = [Ũxx Φ[1:nc, :]*U[:, nc+1:end]; zeros(np,nc) U[nc+1:end, nc+1:end]]    # Eq. (7.27) (7.29)
-    D̃ = [D̃xx; D[nc+1:end]]                                                  # Eq. (7.28)
+    Ũ = [Ũxx Φ[1:nc, :]*U[:, nc+1:nδ]; zeros(np,nc) U[nc+1:nδ, nc+1:nδ]]    # Eq. (7.27) (7.29)
+    D̃ = [D̃xx; D[nc+1:nδ]]                                                  # Eq. (7.28)
 
     # Reference: C. L. Thornton, Triangular Covariance Factorizations for Kalman Filtering, 1976, page 61
-    Qpp = diag(Q[nc+1:end, nc+1:end])
-    M = diag(Φ[nc+1:end, nc+1:end])
+    Qpp = diag(Q[nc+1:nδ, nc+1:nδ])
+    M = diag(Φ[nc+1:nδ, nc+1:nδ])
     Ū = copy(Ũ); D̄ = copy(D̃)
     for k in 1:np
         na = nc + k - 1
         D̄[na+1] = M[k]^2*D̃[na+1] + Qpp[k]                   # d_up_b, Eq. (7.38)
         α = M[k]*D̃[na+1]/D̄[na+1]                            # [Default]
         Ū[1:na, na+1] = α.*Ũ[1:na, na+1]                      # U_up_ab, Eq. (7.39)
-        Ū[na+1, na+2:end] = M[k].*Ũ[na+1, na+2:end]  	      # U_up_bc, Eq. (7.37)
+        Ū[na+1, na+2:nδ] = M[k].*Ũ[na+1, na+2:nδ]  	      # U_up_bc, Eq. (7.37)
         if Qpp[k] > 0
             c = α*Qpp[k]/M[k]
             Ū[1:na, 1:na], D̄[1:na] = ageeTurnerUpdate(Ū[1:na, 1:na], D̄[1:na], c, Ũ[1:na, na+1])  # Eq. (7.40)
@@ -242,7 +243,7 @@ function UDpropagate(U, D, Φ, Q, nc)
     return Ū, D̄
 end
 
-function kalmanUpdateError!(nav::NavStateUD, t, y, h)
+@views function kalmanUpdateError!(nav::NavStateUD, t, y, h)
     # Estimated measurement and jacobians
     ŷ, R, H = h(t, nav.x)
 
@@ -272,7 +273,7 @@ function kalmanUpdateError!(nav::NavStateUD, t, y, h)
 
             # Perform Agee-Turner rank-one update to account for consider states
             if nx > nav.ns
-                nav.U, nav.D = ageeTurnerUpdate(nav.U,nav.D,α,[zeros(nav.ns); K[nav.ns+1:end]]);
+                nav.U, nav.D = ageeTurnerUpdate(nav.U,nav.D,α,[zeros(nav.ns); K[nav.ns+1:nav.nδ]]);
             end
 
             nav.δx[1:nav.ns] += K[1:nav.ns]*δy[i]

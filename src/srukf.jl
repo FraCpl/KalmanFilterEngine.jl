@@ -33,7 +33,7 @@ function computeSigmaPoints!(nav::NavStateSRUKF)
     nav.X[nav.L+2:end] = [nav.x - nav.γ*nav.S[i,:] for i in 1:nav.L]
 end
 
-function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Jf, Q; nSteps=1)
+@views function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Jf, Q; nSteps=1)
     # Create sigma points
     computeSigmaPoints!(nav)
 
@@ -48,7 +48,7 @@ function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Jf, Q; nSteps=1)
     M = zeros(nav.L,2*nav.L)
     wc = sqrt(nav.Wc[2])
     for i in 1:2*nav.L
-        M[:,i] = wc*(nav.X[i+1] - nav.x)
+        M[:, i] = wc*(nav.X[i+1] - nav.x)
     end
     nav.S = qr([M sqrt(Q)]').R
 
@@ -60,7 +60,7 @@ function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Q; nSteps=1)
     kalmanPropagate!(nav, Δt, f, nothing, Q; nSteps=nSteps)
 end
 
-function kalmanUpdate!(nav::NavStateSRUKF, t, y, h)
+@views function kalmanUpdate!(nav::NavStateSRUKF, t, y, h)
     # Create sigma points
     computeSigmaPoints!(nav)
 
@@ -75,7 +75,7 @@ function kalmanUpdate!(nav::NavStateSRUKF, t, y, h)
     M = zeros(ny, 2nav.L)
     wc = sqrt(nav.Wc[2])
     for i in 1:2*nav.L
-        M[:,i] = wc*(Ŷ[i+1] - ŷ)
+        M[:, i] = wc*(Ŷ[i+1] - ŷ)
     end
     Syy = qr([M sqrtR]').R
     δY1 = sqrt(abs(nav.Wc[1]))*(Ŷ[1] - ŷ)
@@ -95,7 +95,7 @@ function kalmanUpdate!(nav::NavStateSRUKF, t, y, h)
     if !isRejected
         # Error state update
         K = (Pxy/Syy)/Syy'                  # Kalman Gain
-        K[nav.ns+1:end, :] .= 0.0            # Consider states
+        K[nav.ns+1:nav.L, :] .= 0.0            # Consider states
         nav.x[1:nav.ns] += K[1:nav.ns, :]*δy
 
         U = K*Syy'
@@ -110,7 +110,7 @@ end
 # https://math.stackexchange.com/questions/4318420/how-does-cholupdate-work
 # https://en.wikipedia.org/wiki/Cholesky_decomposition
 # Caution: This modifies both S and x!
-function cholupdate!(S, x, signx=1.0)
+@views function cholupdate!(S, x, signx=1.0)
     n = length(x)
     for k in 1:n
         r = sqrt(S[k, k]^2 + signx*x[k]^2)

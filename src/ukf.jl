@@ -71,7 +71,7 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f, Q; nSteps=1)
     kalmanPropagate!(nav, Δt, f, nothing, Q, nSteps=nSteps)
 end
 
-function kalmanUpdate!(nav::NavStateUKF, t, y, h)
+@views function kalmanUpdate!(nav::NavStateUKF, t, y, h)
     # Create sigma points
     computeSigmaPoints!(nav)
 
@@ -98,12 +98,12 @@ function kalmanUpdate!(nav::NavStateUKF, t, y, h)
     # Update error state and covariance matrix
     if !isRejected
         # Error state update
-        Ks = Pxy[1:nav.ns,:]/Pyy     # Kalman Gain
+        Ks = Pxy[1:nav.ns, :]/Pyy     # Kalman Gain
         nav.x[1:nav.ns] += Ks*δy
 
         # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns,:] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:end,:]']
-        nav.P[nav.ns+1:end,1:nav.ns] = nav.P[1:nav.ns,nav.ns+1:end]'
+        nav.P[1:nav.ns,:] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:nav.L,:]']
+        nav.P[nav.ns+1:nav.L,1:nav.ns] = nav.P[1:nav.ns,nav.ns+1:nav.L]'
     end
 
     return δy, δz, isRejected

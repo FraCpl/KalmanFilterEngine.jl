@@ -140,20 +140,20 @@ function main()
     end
 
     function plotnav(i, T, X, X̂, σ, linestyle)
-        plot!(T, X - X̂; ticks=:native, lab="", linestyle=linestyle, subplot=i)
-        plot!(T, +3σ; color=:red, lab="", linestyle=linestyle, subplot=i)
-        plot!(T, -3σ; color=:red, lab="", linestyle=linestyle, subplot=i)
+        Plots.plot!(T, X - X̂; ticks=:native, lab="", linestyle=linestyle, subplot=i)
+        Plots.plot!(T, +3σ; color=:red, lab="", linestyle=linestyle, subplot=i)
+        Plots.plot!(T, -3σ; color=:red, lab="", linestyle=linestyle, subplot=i)
     end
 
-    pp = plot(layout=(2, 3))
+    pp = Plots.plot(layout=(2, 3))
     lbl = ["x [m]"; "y [m]"; "z [m]"; "vx [m/s]"; "vy [m/s]"; "vz [m/s]"]
     for i in 1:6
         plotnav(i, T/3600.0/24.0, getindex.(X,i), getindex.(X̂,i), getindex.(σ,i), :solid)
-        plot!(subplot=i, margin=5*Plots.mm, xlim=(T[1]/3600.0/24.0, T[end]/3600.0/24.0))
-        xlabel!(subplot=i, "Time [days]"); ylabel!(subplot=i, lbl[i])
-        if i == 2; title!(subplot=i, "Nav performance"); end
+        Plots.plot!(subplot=i, margin=5*Plots.mm, xlim=(T[1]/3600.0/24.0, T[end]/3600.0/24.0))
+        Plots.xlabel!(subplot=i, "Time [days]"); Plots.ylabel!(subplot=i, lbl[i])
+        if i == 2; Plots.title!(subplot=i, "Nav performance"); end
     end
-    display(plot(pp, size=(1100, 670), bg=RGB(40/255, 44/255, 52/255), fg=RGB(0.7, 0.7, 0.7), right_margin=10*Plots.mm))
+    display(Plots.plot(pp, size=(1100, 670), bg=RGB(40/255, 44/255, 52/255), fg=RGB(0.7, 0.7, 0.7), right_margin=10*Plots.mm))
 
     # display(plot(t/3600.0/24.0,norm.(X); ticks = :native))
 end

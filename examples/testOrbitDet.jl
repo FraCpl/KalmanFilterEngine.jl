@@ -46,11 +46,11 @@ function main(;showplot=true)
 
     x = nav.x + rand(MvNormal(getCov(nav)))
     X = [x]; T = [0.0];
-    X̂ = [nav.x]; σ = [getStd(nav)];
-    X̂ud = [navUD.x]; σud = [getStd(navUD)];
-    X̂ukf = [navUKF.x]; σukf = [getStd(navUKF)];
-    X̂srukf = [navSRUKF.x]; σsrukf = [getStd(navSRUKF)]
-    X̂iekf = [navIEKF.x]; σiekf = [getStd(navIEKF)]
+    X̂ = [copy(nav.x)]; σ = [getStd(nav)];
+    X̂ud = [copy(navUD.x)]; σud = [getStd(navUD)];
+    X̂ukf = [copy(navUKF.x)]; σukf = [getStd(navUKF)];
+    X̂srukf = [copy(navSRUKF.x)]; σsrukf = [getStd(navSRUKF)]
+    X̂iekf = [copy(navIEKF.x)]; σiekf = [getStd(navIEKF)]
 
     for k in 1:100
         # Generate measurement at t[k]
@@ -73,11 +73,11 @@ function main(;showplot=true)
         #if showplot
         push!(T, nav.t)
         push!(X, x)
-        push!(X̂, nav.x)
-        push!(X̂ud, navUD.x)
-        push!(X̂ukf, navUKF.x)
-        push!(X̂srukf, navSRUKF.x)
-        push!(X̂iekf, navIEKF.x)
+        push!(X̂, copy(nav.x))
+        push!(X̂ud, copy(navUD.x))
+        push!(X̂ukf, copy(navUKF.x))
+        push!(X̂srukf, copy(navSRUKF.x))
+        push!(X̂iekf, copy(navIEKF.x))
         push!(σ, getStd(nav))
         push!(σud, getStd(navUD))
         push!(σukf, getStd(navUKF))

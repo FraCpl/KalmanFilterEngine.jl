@@ -100,7 +100,7 @@ function main()
     # Run navigation
     x = [x₀; x₀; x₀]
     X = [x[1:6]]; T = [t[1]]
-    X̂ = [nav.x]; σ = [getStd(nav)];
+    X̂ = [copy(nav.x)]; σ = [getStd(nav)];
     dummy, R, ~ = h(zeros(12), zeros(4), zeros(4), 0.0, 0.0, 0.0)
 
     latch = 1
@@ -135,7 +135,7 @@ function main()
         # Save data for post-processing
         push!(T, T[end] + Δt)
         push!(X, x[1:6])
-        push!(X̂, nav.x)
+        push!(X̂, copy(nav.x))
         push!(σ, getStd(nav))
     end
 

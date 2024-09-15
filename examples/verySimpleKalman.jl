@@ -6,7 +6,7 @@ x₀ = zeros(6)                                   # True initial state
 Φ = I + [zeros(3,3) Δt*I; zeros(3,6)]           # State transition matrix
 
 # Define navigation problem
-Q = Diagonal([1e-4*ones(3); 1e-3*ones(3)].^2)   # Process noise covariance
+Q = diagm([1e-4*ones(3); 1e-3*ones(3)].^2)   # Process noise covariance
 R = 0.0483*Matrix(I, 3, 3)                        # Measurement noise covariance
 f(t, x) = [x[4:6]; zeros(3)]                    # System dynamics
 h(t, x) = (x[1:3], R, [I zeros(3, 3)])          # Measurement equation
@@ -33,7 +33,7 @@ for k in 1:100
     # Save for post-processing
     push!(T, nav.t)
     push!(X, x)
-    push!(X̂, copy(nav.x))
+    push!(X̂, getState(nav))
     push!(σ, getStd(nav))
 end
 

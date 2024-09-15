@@ -262,7 +262,7 @@ end
         Ph = W1*diagm(nav.D)*W1'
 
         # Measurement Editing (innovation check)
-        δy[i] = y[i] - ŷ[i] - (H[i:i, :]*nav.δx)[1]
+        δy[i] = y[i] - ŷ[i] - H[i, :]'*nav.δx
         δz[i] = δy[i]/sqrt(Ph[1] + R[i, i])
         isRejected = abs(δz[i]) > nav.σᵣ
 

@@ -37,7 +37,7 @@ function main(;showplot=true)
         vel=[0.0; 1.1*sqrt(3.986e14/(6370e3+500e3)); 532.2],
     )
     P₀ = x̂₀*x̂₀'
-    P₀ .= Diagonal([1.0e2; 1.0e2; 1.0e2; 1.0e2; 1.0e2; 1.0e2].^2)
+    P₀ .= diagm([1.0e2; 1.0e2; 1.0e2; 1.0e2; 1.0e2; 1.0e2].^2)
 
     nav = NavState(0.0, x̂₀, P₀)
     navUD = NavState(0.0, x̂₀, P₀; type=:UD)
@@ -50,11 +50,11 @@ function main(;showplot=true)
 
     x = nav.x + rand(MvNormal(getCov(nav)))
     X = [x]; T = [0.0];
-    X̂ = [copy(nav.x)]; σ = [getStd(nav)];
-    X̂ud = [copy(navUD.x)]; σud = [getStd(navUD)];
-    X̂ukf = [copy(navUKF.x)]; σukf = [getStd(navUKF)];
-    X̂srukf = [copy(navSRUKF.x)]; σsrukf = [getStd(navSRUKF)]
-    X̂iekf = [copy(navIEKF.x)]; σiekf = [getStd(navIEKF)]
+    X̂ = [getState(nav)]; σ = [getStd(nav)];
+    X̂ud = [getState(navUD)]; σud = [getStd(navUD)];
+    X̂ukf = [getState(navUKF)]; σukf = [getStd(navUKF)];
+    X̂srukf = [getState(navSRUKF)]; σsrukf = [getStd(navSRUKF)]
+    X̂iekf = [getState(navIEKF)]; σiekf = [getStd(navIEKF)]
 
     for k in 1:100
         # Generate measurement at t[k]
@@ -76,15 +76,15 @@ function main(;showplot=true)
         #if showplot
         push!(T, nav.t)
         push!(X, x)
-        push!(X̂, copy(nav.x))
+        push!(X̂, getState(nav))
         push!(σ, getStd(nav))
-        push!(X̂ud, copy(navUD.x))
+        push!(X̂ud, getState(navUD))
         push!(σud, getStd(navUD))
-        push!(X̂ukf, copy(navUKF.x))
+        push!(X̂ukf, getState(navUKF))
         push!(σukf, getStd(navUKF))
-        push!(X̂srukf, copy(navSRUKF.x))
+        push!(X̂srukf, getState(navSRUKF))
         push!(σsrukf, getStd(navSRUKF))
-        push!(X̂iekf, copy(navIEKF.x))
+        push!(X̂iekf, getState(navIEKF))
         push!(σiekf, getStd(navIEKF))
         #end
     end

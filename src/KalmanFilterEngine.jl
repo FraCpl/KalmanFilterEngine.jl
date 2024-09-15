@@ -7,7 +7,7 @@ using LinearAlgebra, ForwardDiff
 export generatePosDefMatrix, resetErrorState!, getStd, computeQd
 include("utils.jl")
 
-export NavState, AbstractNavState
+export NavState, AbstractNavState, getState
 export getCov, kalmanUpdate!, kalmanPropagate!, kalmanUpdateError!
 include("NavState.jl")
 include("ekf.jl")

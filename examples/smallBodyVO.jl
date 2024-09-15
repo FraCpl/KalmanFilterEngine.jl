@@ -76,15 +76,15 @@ function main()
 
     # Initialize navigation
     #Q = computeQd([zeros(3,3) I zeros(3,3); zeros(6,9)], [zeros(3,3); I; zeros(3,3)], 1e-7I, Δt)
-    Q = Diagonal([1e-2*ones(3); 1e-5*ones(3); zeros(3)].^2)  # Polimi
-    P₀ = Diagonal([100*ones(3); 1e-4*ones(3); 1e-6*ones(3)].^2)
+    Q = diagm([1e-2*ones(3); 1e-5*ones(3); zeros(3)].^2)  # Polimi
+    P₀ = diagm([100*ones(3); 1e-4*ones(3); 1e-6*ones(3)].^2)
     x̂₀ = [x₀; 0.0; 0.0; 0.0] + rand(MvNormal(P₀)); x̂₀[7:9] .= 0.0
     nav = NavState(0.0, x̂₀, P₀; type=:ESKF)
 
     # Run navigation
     x = [x₀; x₀]
     X = [x[1:6]]; T = [t[1]]
-    X̂ = [copy(nav.x)]; σ = [getStd(nav)];
+    X̂ = [getState(nav)]; σ = [getStd(nav)];
     dummy, R, ~ = h(zeros(9), zeros(4), 0.0, 0.0)
 
     for k = 1:lastindex(t)
@@ -105,7 +105,7 @@ function main()
         # Save data for post-processing
         push!(T, T[end] + Δt)
         push!(X, x[1:6])
-        push!(X̂, copy(nav.x))
+        push!(X̂, getState(nav))
         push!(σ, getStd(nav))
     end
 

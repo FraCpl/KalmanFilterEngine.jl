@@ -29,7 +29,7 @@ getCov(nav::NavStateSRUKF) = nav.S'*nav.S
 
 @views function computeSigmaPoints!(nav::NavStateSRUKF)
     nav.X[1] = nav.x
-    for i in 1:nav.L #eachrow(nav.S)
+    @inbounds for i in 1:nav.L #eachrow(nav.S)
         nav.X[i+1] .= nav.x + nav.γ*nav.S[i, :]
         nav.X[i+1+nav.L] .= nav.x - nav.γ*nav.S[i, :]
     end
@@ -51,7 +51,7 @@ end
     # Calculate covariance estimate
     M = zeros(nav.L,2*nav.L)
     wc = sqrt(nav.Wc[2])
-    for i in 1:2*nav.L
+    @inbounds for i in 1:2*nav.L
         M[:, i] = wc*(nav.X[i+1] - nav.x)
     end
     nav.S = qr([M sqrt(Q)]').R
@@ -78,7 +78,7 @@ end
     # Compute sigma statistics
     M = zeros(ny, 2nav.L)
     wc = sqrt(nav.Wc[2])
-    for i in 1:2*nav.L
+    @inbounds for i in 1:2*nav.L
         M[:, i] = wc*(Ŷ[i+1] - ŷ)
     end
     Syy = qr([M sqrtR]').R
@@ -86,7 +86,7 @@ end
     cholupdate!(Syy, δY1, sign(nav.Wc[1]))
 
     Pxy = zeros(nav.L,ny)
-    for i = 1:2*nav.L+1
+    @inbounds for i = 1:2*nav.L+1
         Pxy = Pxy + nav.Wc[i].*(nav.X[i] - nav.x)*(Ŷ[i] - ŷ)'
     end
 
@@ -103,7 +103,7 @@ end
         nav.x[1:nav.ns] += K[1:nav.ns, :]*δy
 
         U = K*Syy'
-        for i in 1:ny
+        @inbounds for i in 1:ny
             cholupdate!(nav.S, U[:, i], -1.0)
         end
     end
@@ -116,7 +116,7 @@ end
 # Caution: This modifies both S and x!
 @views function cholupdate!(S, x, signx=1.0)
     n = length(x)
-    for k in 1:n
+    @inbounds for k in 1:n
         r = sqrt(S[k, k]^2 + signx*x[k]^2)
         c = r/S[k, k]
         s = x[k]/S[k, k]

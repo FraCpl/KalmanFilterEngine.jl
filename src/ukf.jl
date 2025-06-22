@@ -24,7 +24,7 @@ function NavStateUKF(t, x, P; α=1e-3, β=2.0, κ=0.0)
     return NavStateUKF(t, x, P, L, 6, γ, Wm, Wc, L, [0*x for _ in 1:2L+1])
 end
 
-function getCov(nav::NavStateUKF)
+@inline function getCov(nav::NavStateUKF)
     return nav.P
 end
 
@@ -41,12 +41,12 @@ function UKFweights(L, α=1e-3, β=2.0, κ=0.0)
     return γ, Wm, Wc
 end
 
-function computeSigmaPoints!(nav::NavStateUKF)
+@inline function computeSigmaPoints!(nav::NavStateUKF)
     S = sqrt(nav.P)
     nav.X[1] = nav.x
-    for i in 1:nav.L #eachrow(nav.S)
-        nav.X[i+1] .= nav.x + nav.γ*nav.S[i, :]
-        nav.X[i+1+nav.L] .= nav.x - nav.γ*nav.S[i, :]
+    @inbounds for i in 1:nav.L #eachrow(nav.S)
+        nav.X[i+1] .= nav.x + nav.γ*S[i, :]
+        nav.X[i+1+nav.L] .= nav.x - nav.γ*S[i, :]
     end
     # nav.X[2:nav.L+1] = [nav.x + nav.γ*S[i,:] for i in 1:nav.L]
     # nav.X[nav.L+2:end] = [nav.x - nav.γ*S[i,:] for i in 1:nav.L]
@@ -65,13 +65,13 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f, Jf, Q; nSteps=1)
 
     # Compute covariance estimate
     nav.P = copy(Q)
-    for i in 1:2*nav.L+1
+    @inbounds for i in 1:2*nav.L+1
         δX = nav.X[i] - nav.x
         nav.P += nav.Wc[i].*δX*δX'
     end
 end
 
-function kalmanPropagate!(nav::NavStateUKF, Δt, f, Q; nSteps=1)
+@inline function kalmanPropagate!(nav::NavStateUKF, Δt, f, Q; nSteps=1)
     kalmanPropagate!(nav, Δt, f, nothing, Q, nSteps=nSteps)
 end
 
@@ -87,7 +87,7 @@ end
     # Compute sigma statistics
     Pxy = zeros(nav.L, length(ŷ))
     Pyy = getindex.(out, 2)[1]   # R
-    for i in 1:2*nav.L+1
+    @inbounds for i in 1:2*nav.L+1
         δY = Ŷ[i] - ŷ
         δX = nav.X[i] - nav.x
         Pyy += nav.Wc[i].*δY*δY'

@@ -31,10 +31,10 @@ getCov(nav::NavStateUD) = nav.U*diagm(nav.D)*nav.U'
     if abs(P[end]) > 1e-9
         U[:, end] = P[:, end]./P[end]
     end
-    for j in n-1:-1:1
+    @inbounds for j in n-1:-1:1
         D[j] = P[j, j] - sum(D[j+1:n].*U[j, j+1:n].^2)
         if D[j] > 0.0
-            for i in j-1:-1:1
+            @inbounds for i in j-1:-1:1
                 U[i, j] = (P[i, j] - sum(D[j+1:n].*U[i, j+1:n].*U[j, j+1:n]))/D[j]
             end
         end
@@ -55,11 +55,11 @@ end
         n = length(D)
         Ũ = Matrix(1.0I, n, n)
         D̃ = zeros(n)
-        for j in n:-1:2
+        @inbounds for j in n:-1:2
             D̃[j] = D[j] + c*xx[j]^2
             b = c/D̃[j]
             v = b*xx[j]
-            for i in 1:j-1
+            @inbounds for i in 1:j-1
                 xx[i] = xx[i] - U[i, j]*xx[j]
                 Ũ[i, j] = U[i, j] + xx[i]*v
             end
@@ -88,7 +88,7 @@ end
     f = zeros(n)
 
     f[1] = H[1]
-    for i in 2:n
+    @inbounds for i in 2:n
         f[i] = (Ū[1:i, i:i]'*H[1:i])[1]   # f = Ū'*H';
     end
     v = D̄.*f
@@ -97,7 +97,7 @@ end
     D[1] = R/αOld*D̄[1]
 
     α = αOld
-    for i in 2:n
+    @inbounds for i in 2:n
         α = αOld + v[i]*f[i]
         D[i] = αOld/α*D̄[i]
         U[:,i] = Ū[:,i] - f[i]/αOld*K̄
@@ -121,11 +121,11 @@ end
     D̃ = [D; Q]
 
     b = [Φ*U Φw]'
-    for j in n:-1:2
+    @inbounds for j in n:-1:2
         f = D̃.*b[:, j]
         D̄[j] = b[:, j]'*f
         f = f./D̄[j]
-        for i in 1:j-1
+        @inbounds for i in 1:j-1
             Ū[i,j] = b[:, i]'*f
             b[:,i] = b[:, i] - Ū[i, j]*b[:, j]
         end
@@ -145,13 +145,13 @@ end
     D̄ = zeros(n)
 
     b = (Φ*U)'
-    for j = n:-1:2
+    @inbounds for j = n:-1:2
         f = D.*b[:, j]
         D̄[j] = b[:, j]'*f
         if D̄[j] > 0              # CHECK THIS IF, there was none before
             f = f./D̄[j]
         end
-        for i = 1:j-1
+        @inbounds for i = 1:j-1
             Ū[i, j] = b[:, i]'*f;
             b[:, i] = b[:, i] - Ū[i, j]*b[:, j];
         end
@@ -196,7 +196,7 @@ function UDpropagate(U, D, Φ, Q, nc)
             Ũxx, D̃xx = modGramSchmidtReduced(Φxx, Uxx, Dxx)
 
             # Add single noise components with ageeTurnerUpdate
-            for i in 1:nc
+            @inbounds for i in 1:nc
                 if Qxx[i, i] > 0
                     x = zeros(nc); x[i] = 1.0
                     Ũxx, D̃xx = ageeTurnerUpdate(Ũxx, D̃xx, Qxx[i, i], x)
@@ -228,7 +228,7 @@ function UDpropagate(U, D, Φ, Q, nc)
     Qpp = diag(Q[nc+1:nδ, nc+1:nδ])
     M = diag(Φ[nc+1:nδ, nc+1:nδ])
     Ū = copy(Ũ); D̄ = copy(D̃)
-    for k in 1:np
+    @inbounds for k in 1:np
         na = nc + k - 1
         D̄[na+1] = M[k]^2*D̃[na+1] + Qpp[k]                   # d_up_b, Eq. (7.38)
         α = M[k]*D̃[na+1]/D̄[na+1]                            # [Default]
@@ -257,7 +257,7 @@ end
     nx = length(nav.D)
     isRejected = false
 
-    for i in 1:ny
+    @inbounds for i in 1:ny
         W1 = H[i:i,:]*nav.U
         Ph = W1*diagm(nav.D)*W1'
 

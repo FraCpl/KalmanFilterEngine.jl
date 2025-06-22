@@ -5,7 +5,7 @@ function odeCore(t0, x0, Δt, f; nSteps=1)
     x = copy(x0)
     h = Δt/nSteps
     K1 = similar(x0); K2 = similar(x0); K3 = similar(x0); K4 = similar(x0)
-    for _ in 1:nSteps
+    @inbounds for _ in 1:nSteps
         K1 .= h.*f(t, x)
         K2 .= h.*f(t + 1/3*h, x + K1/3)
         K3 .= h.*f(t + 2/3*h, x - K1/3 + K2)
@@ -29,7 +29,7 @@ function odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
     h = Δt/nSteps
     K1 = similar(x0); K2 = similar(x0); K3 = similar(x0); K4 = similar(x0)
     P1 = similar(Φ0); P2 = similar(Φ0); P3 = similar(Φ0); P4 = similar(Φ0)
-    for _ in 1:nSteps
+    @inbounds for _ in 1:nSteps
         odeAux!(K1, P1, t, x, Φ, f, Jf, h)
         odeAux!(K2, P2, t + 1/3*h, x + K1/3, Φ + P1/3, f, Jf, h)
         odeAux!(K3, P3, t + 2/3*h, x - K1/3 + K2, Φ - P1/3 + P2, f, Jf, h)
@@ -47,7 +47,7 @@ end
 
 Generate a random positive definite matrix of size ```n```.
 """
-function generatePosDefMatrix(n)
+@inline function generatePosDefMatrix(n)
     P = rand(n, n)
     return (P + P')/2 + n*I
 end
@@ -57,7 +57,7 @@ end
 
 Set error state to zero after the update of an error-state EKF.
 """
-function resetErrorState!(nav)
+@inline function resetErrorState!(nav)
     nav.δx .= 0.0
 end
 
@@ -66,16 +66,15 @@ end
 
 Compute the square-root of the diagonal of the navigation covariance matrix ``P``.
 """
-function getStd(nav)
+@inline function getStd(nav)
     return sqrt.(diag(getCov(nav)))
 end
 
 #=
 This function decorrelates the measurement noise using the UD factorization.
 =#
-function decorrelateMeas(y, ŷ, R, H)
+@inline function decorrelateMeas(y, ŷ, R, H)
     Rc, Rd = UD(R)
-
     return Rc\y, Rc\ŷ, diagm(Rd), Rc\H
 end
 

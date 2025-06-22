@@ -19,4 +19,4 @@ function NavState(t, x, P; type::Symbol=:EKF, α=1e-3, β=2.0, κ=0.0, iter=5) :
     return NavStateEKF(t, copy(x), copy(P); iter=0)
 end
 
-getState(nav::AbstractNavState) = copy(nav.x)
+@inline getState(nav::AbstractNavState) = copy(nav.x)

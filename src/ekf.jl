@@ -111,7 +111,7 @@ end
     δy = similar(y); δz = similar(y)
     isRejected = false
 
-    for i in eachindex(y)
+    @inbounds for i in eachindex(y)
         # Estimated measurement and jacobians
         Pxy = nav.P*H[i, :]
         Pyy = H[i, :]'*Pxy + R[i, i]
@@ -176,7 +176,7 @@ end
         xIter = copy(nav.x)
 
         # Start iterations
-        for i in 1:iter
+        @inbounds for i in 1:iter
             if i > 1
                 ŷ, R, H = h(t, xIter)
                 Pxy .= nav.P*H'

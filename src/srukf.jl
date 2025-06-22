@@ -27,10 +27,14 @@ end
 
 getCov(nav::NavStateSRUKF) = nav.S'*nav.S
 
-function computeSigmaPoints!(nav::NavStateSRUKF)
+@views function computeSigmaPoints!(nav::NavStateSRUKF)
     nav.X[1] = nav.x
-    nav.X[2:nav.L+1] = [nav.x + nav.γ*nav.S[i,:] for i in 1:nav.L]
-    nav.X[nav.L+2:end] = [nav.x - nav.γ*nav.S[i,:] for i in 1:nav.L]
+    for i in 1:nav.L #eachrow(nav.S)
+        nav.X[i+1] .= nav.x + nav.γ*nav.S[i, :]
+        nav.X[i+1+nav.L] .= nav.x - nav.γ*nav.S[i, :]
+    end
+    # nav.X[2:nav.L+1] = [nav.x + nav.γ*s for s in eachrow(nav.S)]
+    # nav.X[nav.L+2:end] = [nav.x - nav.γ*s for s in eachrow(nav.S)]
 end
 
 @views function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Jf, Q; nSteps=1)

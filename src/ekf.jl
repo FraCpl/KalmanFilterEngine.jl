@@ -55,20 +55,20 @@ function kalmanPropagate!(nav::NavStateEKF, Δt, f, Jf, Q; nSteps=1)
     nav.P = Φ*nav.P*Φ' + Q
 end
 
-"""
-    kalmanPropagate!(nav, Δt, f, Q; nSteps = 1)
+# """
+#     kalmanPropagate!(nav, Δt, f, Q; nSteps = 1)
 
-Propagate navigation state forward in time for ```Δt``` time units.
+# Propagate navigation state forward in time for ```Δt``` time units.
 
-Inputs include the dynamics function ```ẋ = f(t, x)```, and equivalent discrete-time process noise
-covariance matrix ```Q```. The optional keyword argument ```nSteps``` indicates the
-number of RK4 steps to be performed when numerically integrating the system's
-dynamics.
-"""
-function kalmanPropagate!(nav::NavStateEKF, Δt, f, Q; nSteps=1)
-    Jf(t, x) = ForwardDiff.jacobian(x -> f(t, x), x)
-    kalmanPropagate!(nav, Δt, f, Jf, Q, nSteps = nSteps)
-end
+# Inputs include the dynamics function ```ẋ = f(t, x)```, and equivalent discrete-time process noise
+# covariance matrix ```Q```. The optional keyword argument ```nSteps``` indicates the
+# number of RK4 steps to be performed when numerically integrating the system's
+# dynamics.
+# """
+# function kalmanPropagate!(nav::NavStateEKF, Δt, f, Q; nSteps=1)
+#     Jf(t, x) = ForwardDiff.jacobian(x -> f(t, x), x)
+#     kalmanPropagate!(nav, Δt, f, Jf, Q, nSteps = nSteps)
+# end
 
 """
     kalmanUpdateError!(nav, t, y, h)
@@ -98,7 +98,8 @@ to EKF and UDEKF.
         nav.δx[1:nav.ns] += Ks*δy
 
         # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns, :] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:nav.nδ, :]']
+        nav.P[1:nav.ns, 1:nav.ns] .-= Ks*Pyy*Ks'
+        nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= Ks*Pxy[nav.ns+1:nav.nδ, :]'
         nav.P[nav.ns+1:nav.nδ, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:nav.nδ]'
     end
 
@@ -127,7 +128,8 @@ end
             nav.δx[1:nav.ns] += Ks*δy[i]
 
             # Covariance update (non-optimal gain with consider states)
-            nav.P[1:nav.ns, :] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:nav.nδ, :]']
+            nav.P[1:nav.ns, 1:nav.ns] .-= Ks*Pyy*Ks'
+            nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= Ks*Pxy[nav.ns+1:nav.nδ, :]'
             nav.P[nav.ns+1:nav.nδ, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:nav.nδ]'
         end
     end
@@ -190,7 +192,8 @@ end
         nav.x .= xIter
 
         # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns, :] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:nav.nδ, :]']
+        nav.P[1:nav.ns, 1:nav.ns] .-= Ks*Pyy*Ks'
+        nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= Ks*Pxy[nav.ns+1:nav.nδ, :]'
         nav.P[nav.ns+1:nav.nδ, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:nav.nδ]'
     end
 

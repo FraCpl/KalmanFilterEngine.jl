@@ -166,10 +166,10 @@ function kalmanPropagate!(nav::NavStateUD, Δt, f, Jf, Q; nSteps=1)
     nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, size(nav.x, 1))
 end
 
-function kalmanPropagate!(nav::NavStateUD, Δt, f, Q; nSteps=1)
-    Jf(t, x) = ForwardDiff.jacobian(x -> f(t, x), x)
-    kalmanPropagate!(nav, Δt, f, Jf, Q, nSteps=nSteps)
-end
+# function kalmanPropagate!(nav::NavStateUD, Δt, f, Q; nSteps=1)
+#     Jf(t, x) = ForwardDiff.jacobian(x -> f(t, x), x)
+#     kalmanPropagate!(nav, Δt, f, Jf, Q, nSteps=nSteps)
+# end
 
 # UD covariance propagation, taking into account non-correlated states
 # (e.g., measurement biases, ecrvs)

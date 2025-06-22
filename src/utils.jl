@@ -49,7 +49,7 @@ Generate a random positive definite matrix of size ```n```.
 """
 function generatePosDefMatrix(n)
     P = rand(n, n)
-    return (P + P')/2 + Matrix(n*I, n, n)
+    return (P + P')/2 + n*I
 end
 
 """

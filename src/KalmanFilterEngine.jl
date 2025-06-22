@@ -2,7 +2,7 @@
 # European Space Agency, 2024
 module KalmanFilterEngine
 
-using LinearAlgebra, ForwardDiff
+using LinearAlgebra#, ForwardDiff
 
 export generatePosDefMatrix, resetErrorState!, getStd, computeQd
 include("utils.jl")

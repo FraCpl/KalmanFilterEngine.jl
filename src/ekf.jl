@@ -130,12 +130,12 @@ end
         if !isRejected
             # Error state update
             Ks = Pxy[1:nav.ns, :]/Pyy    # Kalman Gain
-            nav.δx[1:nav.ns] += Ks*δy[i]
+            nav.δx[1:nav.ns] .+= Ks*δy[i]
 
             # Covariance update (non-optimal gain with consider states)
             nav.P[1:nav.ns, 1:nav.ns] .-= Ks*Pyy*Ks'
             nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= Ks*Pxy[nav.ns+1:nav.nδ, :]'
-            nav.P[nav.ns+1:nav.nδ, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:nav.nδ]'
+            nav.P[nav.ns+1:nav.nδ, 1:nav.ns] .= nav.P[1:nav.ns, nav.ns+1:nav.nδ]'
         end
     end
 

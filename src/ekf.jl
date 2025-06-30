@@ -116,6 +116,11 @@ end
         Pxy = nav.P*H[i, :]
         Pyy = H[i, :]'*Pxy + R[i, i]
 
+        if Pyy[1, 1] < 0
+            isRejected = true;
+            break
+        end
+
         # Measurement editing
         δy[i] = y[i] - (ŷ[i] + H[i, :]'*nav.δx)
         δz[i] = δy[i]/sqrt(Pyy)                     # Normalized innovation

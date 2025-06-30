@@ -108,7 +108,7 @@ end
 
 # Scalar measurement update for EKF
 @views function kalmanUpdateErrorScalar!(nav::NavStateEKF, y, ŷ, R, H)
-    δy = similar(y); δz = similar(y)
+    δy = zero(y); δz = zero(y)
     isRejected = false
 
     @inbounds for i in eachindex(y)

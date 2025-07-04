@@ -29,7 +29,7 @@ for k in 1:100
     kalmanPropagate!(nav, Δt, f, Jf, Q)
 
     # Simulate system dynamics
-    x = Φ*x + rand(MvNormal(Q))
+    x .= Φ*x + rand(MvNormal(Q))
 
     # Save for post-processing
     push!(T, nav.t)

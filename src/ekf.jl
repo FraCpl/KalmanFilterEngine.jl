@@ -87,8 +87,12 @@ to EKF and UDEKF.
     Pyy = H*Pxy + R
 
     # Measurement editing
+    dPyy = diag(Pyy)
+    if any(dPyy .< 0.0)
+        return zero(y), zero(y), true
+    end
     δy = y - (ŷ + H*nav.δx)
-    δz = δy./sqrt.(diag(Pyy))                   # Normalized innovation
+    δz = δy./sqrt.(dPyy)                        # Normalized innovation
     isRejected = maximum(abs.(δz)) > nav.σᵣ     # σ rejection threshold
 
     # Update error state and covariance matrix

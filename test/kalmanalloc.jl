@@ -1,9 +1,9 @@
 using KalmanFilterEngine
 using LinearAlgebra
-
+using BenchmarkTools
 
 @views function kalmanUpdateErrorScalarNew!(nav, y, ŷ, R, H)
-    δy = similar(y); δz = similar(y)
+    δy = zero(y); δz = zero(y)
     isRejected = false
 
     for i in eachindex(y)
@@ -41,7 +41,10 @@ y = [0.314; 12.00234; -3.3023]
 yest = [0.214; 7.1234; -2.343]
 R = 1e-3*I
 H = [I zeros(3, 5)]
-@time KalmanFilterEngine.kalmanUpdateErrorScalar!(nav, y, yest, R, H)
-@time kalmanUpdateErrorScalarNew!(nav2, y, yest, R, H)
 
+KalmanFilterEngine.kalmanUpdateErrorScalar!(nav, y, yest, R, H)
+kalmanUpdateErrorScalarNew!(nav2, y, yest, R, H)
 @show norm(nav.P - nav2.P) + norm(nav.x - nav2.x)
+
+@btime KalmanFilterEngine.kalmanUpdateErrorScalar!($nav, $y, $yest, $R, $H)
+@btime kalmanUpdateErrorScalarNew!($nav2, $y, $yest, $R, $H)

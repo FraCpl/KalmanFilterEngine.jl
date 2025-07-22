@@ -115,31 +115,46 @@ end
     δy = zero(y); δz = zero(y)
     isRejected = false
 
+    # Pre-allocate variables
+    Pxy = Vector{eltype(nav.P)}(undef, nav.nδ)
+    Ks = Vector{eltype(nav.P)}(undef, nav.ns)
+    KsPyy = Matrix{eltype(nav.P)}(undef, nav.ns, nav.ns)
+    KsPxyT = Matrix{eltype(nav.P)}(undef, nav.ns, nav.nδ - nav.ns)
+
     @inbounds for i in eachindex(y)
         # Estimated measurement and jacobians
-        Pxy = nav.P*H[i, :]
-        Pyy = H[i, :]'*Pxy + R[i, i]
+        mul!(Pxy, nav.P, H[i, :])
+        Pyy = dot(H[i, :], Pxy) + R[i, i]
 
-        if Pyy[1, 1] < 0
-            isRejected = true;
+        if Pyy < 0.0
+            isRejected = true
             break
         end
 
         # Measurement editing
-        δy[i] = y[i] - (ŷ[i] + H[i, :]'*nav.δx)
+        δy[i] = y[i] - (ŷ[i] + dot(H[i, :], nav.δx))
         δz[i] = δy[i]/sqrt(Pyy)                     # Normalized innovation
         isRejected = abs(δz[i]) > nav.σᵣ            # σ rejection threshold
 
         # Update error state and covariance matrix
         if !isRejected
             # Error state update
-            Ks = Pxy[1:nav.ns, :]/Pyy    # Kalman Gain
-            nav.δx[1:nav.ns] .+= Ks*δy[i]
+            @inbounds for j in 1:nav.ns
+                Ks[j] = Pxy[j]/Pyy    # Kalman Gain
+                nav.δx[j] += Ks[j]*δy[i]
+            end
 
             # Covariance update (non-optimal gain with consider states)
-            nav.P[1:nav.ns, 1:nav.ns] .-= Ks*Pyy*Ks'
-            nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= Ks*Pxy[nav.ns+1:nav.nδ, :]'
-            nav.P[nav.ns+1:nav.nδ, 1:nav.ns] .= nav.P[1:nav.ns, nav.ns+1:nav.nδ]'
+            # P[1:ns, 1:ns] -= Pyy * Ks * Ks'
+            mul!(KsPyy, Ks, Ks')                 # KsPyy = Ks * Ks'
+            rmul!(KsPyy, Pyy)                    # KsPyy *= Pyy
+            nav.P[1:nav.ns, 1:nav.ns] .-= KsPyy # In-place subtraction
+
+            # P[1:ns, ns+1:nδ] -= Ks * Pxy[ns+1:nδ, :]'
+            mul!(KsPxyT, Ks, transpose(Pxy[nav.ns+1:nav.nδ, :]))    # KsPxyT = Ks * PxyδT
+            nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= KsPxyT             # In-place subtraction
+
+            nav.P[nav.ns+1:nav.nδ, 1:nav.ns] .= transpose(nav.P[1:nav.ns, nav.ns+1:nav.nδ])
         end
     end
 

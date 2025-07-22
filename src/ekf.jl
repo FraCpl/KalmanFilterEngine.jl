@@ -146,12 +146,12 @@ end
 
             # Covariance update (non-optimal gain with consider states)
             # P[1:ns, 1:ns] -= Pyy * Ks * Ks'
-            mul!(KsPyy, Ks, Ks')                 # KsPyy = Ks * Ks'
+            mul!(KsPyy, Ks, transpose(Ks))       # KsPyy = Ks * Ks'
             rmul!(KsPyy, Pyy)                    # KsPyy *= Pyy
             nav.P[1:nav.ns, 1:nav.ns] .-= KsPyy # In-place subtraction
 
             # P[1:ns, ns+1:nδ] -= Ks * Pxy[ns+1:nδ, :]'
-            mul!(KsPxyT, Ks, transpose(Pxy[nav.ns+1:nav.nδ, :]))    # KsPxyT = Ks * PxyδT
+            mul!(KsPxyT, Ks, transpose(Pxy[nav.ns+1:nav.nδ]))       # KsPxyT = Ks * PxyδT
             nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= KsPxyT             # In-place subtraction
 
             nav.P[nav.ns+1:nav.nδ, 1:nav.ns] .= transpose(nav.P[1:nav.ns, nav.ns+1:nav.nδ])

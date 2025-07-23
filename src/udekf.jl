@@ -1,9 +1,9 @@
-mutable struct NavStateUD <: AbstractNavState
+mutable struct NavStateUD{T<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}} <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
-    x#::Vector{Float64}      # Full estimated state, x[t]
-    U#::Matrix{Float64}      # Covariance Matrix UD, U[t]
-    D#::Vector{Float64}      # Covariance Matrix UD, D[t]
-    δx#::Vector{Float64}     # Error state, δx[t]
+    x::T                    # Full estimated state, x[t]
+    U::M                    # Covariance Matrix UD, U[t]
+    D::T                    # Covariance Matrix UD, D[t]
+    δx::T                   # Error state, δx[t]
     ns::Int64               # Number of solve for (error) states
     σᵣ::Int64               # Outlier rejection threshold
     nδ::Int64               # Number of error states
@@ -18,15 +18,15 @@ state and navigation covariance matrix.
 function NavStateUD(t, x, P)
     U, D = UD(P)
     nδ = size(U, 1)
-    return NavStateUD(t, x, U, D, 0*P[:, 1], nδ, 6, nδ)
+    return NavStateUD(t, x, U, D, zero(x), nδ, 6, nδ)
 end
 
 getCov(nav::NavStateUD) = nav.U*diagm(nav.D)*nav.U'
 
 @views function UD(P)
     n = size(P, 1)
-    U = Matrix(1.0I, n, n)
-    D = zeros(n)
+    U = zero(P) + I
+    D = zero(P[:, 1])
     D[end] = P[end]
     if abs(P[end]) > 1e-9
         U[:, end] = P[:, end]./P[end]

@@ -1,8 +1,8 @@
-mutable struct NavStateEKF <: AbstractNavState
+mutable struct NavStateEKF{T<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}} <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
-    x#::Vector{Float64}      # Full estimated state, x[t]
-    P#::Matrix{Float64}      # Covariance Matrix, P[t]
-    δx#::Vector{Float64}     # Error state, δx[t]
+    x::T                    # Full estimated state, x[t]
+    P::M                    # Covariance Matrix, P[t]
+    δx::T                   # Error state, δx[t]
     ns::Int64               # Number of solve for (error) states
     σᵣ::Int64               # Outlier rejection threshold
     nδ::Int64               # Number of error states
@@ -17,7 +17,7 @@ state and navigation covariance matrix.
 """
 function NavStateEKF(t, x, P; iter=0)
     nδ = size(P, 1)
-    return NavStateEKF(t, x, P, 0*P[:, 1], nδ, 6, nδ, iter)     # we do 0*P[:, 1] for compatibilty with ComponentArrays
+    return NavStateEKF(t, x, P, zero(x), nδ, 6, nδ, iter)     # we do 0*P[:, 1] for compatibilty with ComponentArrays
 end
 
 """

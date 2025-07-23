@@ -1,14 +1,14 @@
-mutable struct NavStateUKF <: AbstractNavState
+mutable struct NavStateUKF{T<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}} <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
-    x#::Vector{Float64}      # Full estimated state, x[t]
-    P#::Matrix{Float64}      # Covariance matrix P[t]
+    x::T                    # Full estimated state, x[t]
+    P::M                    # Covariance matrix P[t]
     ns::Int64               # Number of solve for states
     σᵣ::Int64               # Outlier rejection threshold
     γ::Float64              # UKF parameters
     Wm::Vector{Float64}     # UKF parameters
     Wc::Vector{Float64}     # UKF parameters
     L::Int64                # Length of state vector
-    X#::Vector{Vector{Float64}}  # Sigma point states
+    X::Vector{T}            # Sigma point states
 end
 
 """
@@ -21,7 +21,7 @@ function NavStateUKF(t, x, P; α=1e-3, β=2.0, κ=0.0)
     L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
 
-    return NavStateUKF(t, x, P, L, 6, γ, Wm, Wc, L, [0*x for _ in 1:2L+1])
+    return NavStateUKF(t, x, P, L, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:2L+1])
 end
 
 @inline function getCov(nav::NavStateUKF)
@@ -64,7 +64,7 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f, Jf, Q; nSteps=1)
     nav.x = sum(nav.Wm.*nav.X)
 
     # Compute covariance estimate
-    nav.P = copy(Q)
+    nav.P .= Q
     @inbounds for i in 1:2*nav.L+1
         δX = nav.X[i] - nav.x
         nav.P += nav.Wc[i].*δX*δX'

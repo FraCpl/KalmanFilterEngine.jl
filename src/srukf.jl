@@ -1,14 +1,14 @@
-mutable struct NavStateSRUKF <: AbstractNavState
+mutable struct NavStateSRUKF{T<:AbstractVector{Float64}} <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
-    x#::Vector{Float64}      # Full estimated state, x[t]
+    x::T                    # Full estimated state, x[t]
     S::Matrix{Float64}      # Cholesky decomposition of covariance matrix S[t]
     ns::Int64               # Number of solve for states
     σᵣ::Int64               # Outlier rejection threshold
     γ::Float64              # UKF parameters
     Wm::Vector{Float64}     # UKF parameters
     Wc::Vector{Float64}     # UKF parameters
-    L::Int64                    # Length of state vector
-    X#::Vector{Vector{Float64}}  # Sigma point states
+    L::Int64                # Length of state vector
+    X::Vector{T}            # Sigma point states
 end
 
 """
@@ -18,11 +18,11 @@ Build SRUKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
 function NavStateSRUKF(t, x, P; α=1e-3, β=2.0, κ=0.0)
-    S = cholesky(P).U
+    S = cholesky(P).U.data
     L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
 
-    return NavStateSRUKF(t, x, S, L, 6, γ, Wm, Wc, L, [0*x for _ in 1:2L+1])
+    return NavStateSRUKF(t, x, S, L, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:2L+1])
 end
 
 getCov(nav::NavStateSRUKF) = nav.S'*nav.S
@@ -54,7 +54,7 @@ end
     @inbounds for i in 1:2*nav.L
         M[:, i] = wc*(nav.X[i+1] - nav.x)
     end
-    nav.S = qr([M sqrt(Q)]').R
+    nav.S .= qr([M sqrt(Q)]').R
 
     δX1 = sqrt(abs(nav.Wc[1]))*(nav.X[1] - nav.x)
     cholupdate!(nav.S, δX1, sign(nav.Wc[1]))

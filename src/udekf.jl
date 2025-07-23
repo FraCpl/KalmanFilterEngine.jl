@@ -2,7 +2,7 @@ mutable struct NavStateUD{T<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}
     t::Float64              # Time corresponding to the estimated state
     x::T                    # Full estimated state, x[t]
     U::M                    # Covariance Matrix UD, U[t]
-    D::T                    # Covariance Matrix UD, D[t]
+    D::X                    # Covariance Matrix UD, D[t]
     δx::X                   # Error state, δx[t]
     ns::Int64               # Number of solve for (error) states
     σᵣ::Int64               # Outlier rejection threshold

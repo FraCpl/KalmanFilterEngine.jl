@@ -154,7 +154,10 @@ end
             mul!(KsPxyT, Ks, transpose(Pxy[nav.ns+1:nav.nδ]))       # KsPxyT = Ks * PxyδT
             nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= KsPxyT             # In-place subtraction
 
-            nav.P[nav.ns+1:nav.nδ, 1:nav.ns] .= transpose(nav.P[1:nav.ns, nav.ns+1:nav.nδ])
+            # nav.P[nav.ns+1:nav.nδ, 1:nav.ns] .= transpose(nav.P[1:nav.ns, nav.ns+1:nav.nδ])
+            @inbounds for ir in nav.ns+1:nav.nδ, ic in 1:nav.ns
+                nav.P[ir, ic] = nav.P[ic, ir]       # Make it symmmetric
+            end
         end
     end
 

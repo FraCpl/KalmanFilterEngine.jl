@@ -17,7 +17,7 @@ state and navigation covariance matrix.
 """
 function NavStateEKF(t, x, P; iter=0)
     nδ = size(P, 1)
-    return NavStateEKF(t, x, P, zero(x), nδ, 6, nδ, iter)     # we do 0*P[:, 1] for compatibilty with ComponentArrays
+    return NavStateEKF(t, x, P, zero(P[:, 1]), nδ, 6, nδ, iter)     # we do 0*P[:, 1] for compatibilty with ComponentArrays
 end
 
 """

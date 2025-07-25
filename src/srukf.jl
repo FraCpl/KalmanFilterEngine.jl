@@ -28,13 +28,11 @@ end
 getCov(nav::NavStateSRUKF) = nav.S'*nav.S
 
 @views function computeSigmaPoints!(nav::NavStateSRUKF)
-    nav.X[1] = nav.x
-    @inbounds for i in 1:nav.L #eachrow(nav.S)
-        nav.X[i+1] .= nav.x + nav.γ*nav.S[i, :]
-        nav.X[i+1+nav.L] .= nav.x - nav.γ*nav.S[i, :]
+    nav.X[1] .= nav.x
+    @inbounds for i in 1:nav.L, j in 1:nav.L
+        nav.X[i+1][j] = nav.x[j] + nav.γ*nav.S[i, j]
+        nav.X[i+1+nav.L][j] = nav.x[j] - nav.γ*nav.S[i, j]
     end
-    # nav.X[2:nav.L+1] = [nav.x + nav.γ*s for s in eachrow(nav.S)]
-    # nav.X[nav.L+2:end] = [nav.x - nav.γ*s for s in eachrow(nav.S)]
 end
 
 @views function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Jf, Q; nSteps=1)
@@ -49,10 +47,10 @@ end
     nav.x = sum(nav.Wm.*nav.X)
 
     # Calculate covariance estimate
-    M = zeros(nav.L,2*nav.L)
+    M = zeros(nav.L, 2*nav.L)
     wc = sqrt(nav.Wc[2])
     @inbounds for i in 1:2*nav.L
-        M[:, i] = wc*(nav.X[i+1] - nav.x)
+        M[:, i] .= wc*(nav.X[i+1] - nav.x)
     end
     nav.S .= qr([M sqrt(Q)]').R
 
@@ -85,9 +83,9 @@ end
     δY1 = sqrt(abs(nav.Wc[1]))*(Ŷ[1] - ŷ)
     cholupdate!(Syy, δY1, sign(nav.Wc[1]))
 
-    Pxy = zeros(nav.L,ny)
+    Pxy = zeros(nav.L, ny)
     @inbounds for i = 1:2*nav.L+1
-        Pxy = Pxy + nav.Wc[i].*(nav.X[i] - nav.x)*(Ŷ[i] - ŷ)'
+        Pxy .+= nav.Wc[i].*(nav.X[i] - nav.x)*(Ŷ[i] - ŷ)'
     end
 
     # Measurement editing
@@ -100,7 +98,7 @@ end
         # Error state update
         K = (Pxy/Syy)/Syy'                  # Kalman Gain
         K[nav.ns+1:nav.L, :] .= 0.0            # Consider states
-        nav.x[1:nav.ns] += K[1:nav.ns, :]*δy
+        nav.x[1:nav.ns] .+= K[1:nav.ns, :]*δy
 
         U = K*Syy'
         @inbounds for i in 1:ny

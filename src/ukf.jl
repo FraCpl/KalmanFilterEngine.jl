@@ -43,7 +43,7 @@ end
 
 @inline function computeSigmaPoints!(nav::NavStateUKF)
     S = sqrt(nav.P)
-    nav.X[1] = nav.x
+    nav.X[1] .= nav.x
     @inbounds for i in 1:nav.L, j in 1:nav.L
         nav.X[i+1][j] = nav.x[j] + nav.γ*S[i, j]
         nav.X[i+1+nav.L][j] = nav.x[j] - nav.γ*S[i, j]
@@ -88,8 +88,8 @@ end
     @inbounds for i in 1:2*nav.L+1
         δY = Ŷ[i] - ŷ
         δX = nav.X[i] - nav.x
-        Pyy += nav.Wc[i].*δY*δY'
-        Pxy += nav.Wc[i].*δX*δY'
+        Pyy .+= nav.Wc[i].*δY*δY'
+        Pxy .+= nav.Wc[i].*δX*δY'
     end
 
     # Measurement editing
@@ -101,10 +101,10 @@ end
     if !isRejected
         # Error state update
         Ks = Pxy[1:nav.ns, :]/Pyy     # Kalman Gain
-        nav.x[1:nav.ns] += Ks*δy
+        nav.x[1:nav.ns] .+= Ks*δy
 
         # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns,:] -= Ks*[Pyy*Ks' Pxy[nav.ns+1:nav.L,:]']
+        nav.P[1:nav.ns,:] .-= Ks*[Pyy*Ks' Pxy[nav.ns+1:nav.L,:]']
         nav.P[nav.ns+1:nav.L,1:nav.ns] = nav.P[1:nav.ns,nav.ns+1:nav.L]'
     end
 

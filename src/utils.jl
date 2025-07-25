@@ -53,15 +53,6 @@ Generate a random positive definite matrix of size ```n```.
 end
 
 """
-    resetErrorState!(nav)
-
-Set error state to zero after the update of an error-state EKF.
-"""
-@inline function resetErrorState!(nav)
-    nav.δx .= 0.0
-end
-
-"""
     getStd(nav)
 
 Compute the square-root of the diagonal of the navigation covariance matrix ``P``.

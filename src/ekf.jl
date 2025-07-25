@@ -27,15 +27,6 @@ Get navigation covariance matrix ``P``.
 """
 getCov(nav::NavStateEKF) = nav.P
 
-# This function propagates the full navigation state from the current
-# time to the current time plus Δt using a Runge-Kutta algorithm. It
-# also computes the state transition matrix by numerical integration
-# of the Jacobian of the dynamics.
-function kalmanOde(t0, x0, Δt, f, Jf, nδ; nSteps=1)
-    x, Φ = odeCore(t0, x0, Matrix(1.0I, nδ, nδ), Δt, f, Jf; nSteps=nSteps)
-    return t0 + Δt, x, Φ
-end
-
 # This is the Kalman filter propagation routine for a continuous time
 # dynamical model described by a set of 1st order ordinary differential
 # equations.
@@ -51,8 +42,27 @@ number of RK4 steps to be performed when numerically integrating the system's
 dynamics. This function is only applicable to EKF and UDEKF.
 """
 function kalmanPropagate!(nav::NavStateEKF, Δt, f, Jf, Q; nSteps=1)
-    nav.t, nav.x, Φ = kalmanOde(nav.t, nav.x, Δt, f, Jf, nav.nδ; nSteps=nSteps)
-    nav.P = Φ*nav.P*Φ' + Q
+    Φ = kalmanPropagateState!(nav, Δt, f, Jf; nSteps=nSteps)
+    kalmanPropagateCov!(nav, Φ, Q)
+end
+
+# This function propagates the full navigation state from the current
+# time to the current time plus Δt using a Runge-Kutta algorithm. It
+# also computes the state transition matrix by numerical integration
+# of the Jacobian of the dynamics.
+function kalmanPropagateState!(nav, Δt, f, Jf; nSteps=1)
+    nav.x, Φ = odeCore(nav.t, nav.x, Matrix(1.0I, nav.nδ, nav.nδ), Δt, f, Jf; nSteps=nSteps)
+    nav.t += Δt
+    return Φ
+end
+
+# This function implements the covariance propagation formula
+# P[k+1] = ϕ*P[k]*ϕᵀ + Q
+function kalmanPropagateCov!(nav::NavStateEKF, Φ, Q, tmp=similar(nav.P))
+    mul!(tmp, nav.P, transpose(Φ))
+    mul!(nav.P, Φ, tmp)
+    nav.P .+= Q
+    return
 end
 
 # """
@@ -69,6 +79,27 @@ end
 #     Jf(t, x) = ForwardDiff.jacobian(x -> f(t, x), x)
 #     kalmanPropagate!(nav, Δt, f, Jf, Q, nSteps = nSteps)
 # end
+
+"""
+    kalmanUpdate!(nav, t, y, h)
+
+Update state of the Kalman filter using the input measurement.
+
+Inputs include the measurement time ```t```, measurement ```y```,
+measurement equation function ```ŷ, R, H = h(t, x)```. When using SRUKF or UKF, the
+measurement function only needs to provide ```ŷ``` and ```R``` as outputs.
+"""
+function kalmanUpdate!(nav::NavStateEKF, t, y, h)
+    if nav.iter > 0
+        return kalmanUpdateIter!(nav, t, y, h, nav.iter)  # This is an IEKF
+    end
+
+    δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
+    nav.x .+= nav.δx
+    nav.δx .= 0.0       # reset error state
+
+    return δy, δz, isRejected
+end
 
 """
     kalmanUpdateError!(nav, t, y, h)
@@ -93,18 +124,20 @@ to EKF and UDEKF.
     end
     δy = y - (ŷ + H*nav.δx)
     δz = δy./sqrt.(dPyy)                        # Normalized innovation
-    isRejected = maximum(abs.(δz)) > nav.σᵣ     # σ rejection threshold
+    isRejected = maximum(abs, δz) > nav.σᵣ     # σ rejection threshold
 
     # Update error state and covariance matrix
     if !isRejected
         # Error state update
         Ks = Pxy[1:nav.ns, :]/Pyy    # Kalman Gain
-        nav.δx[1:nav.ns] += Ks*δy
+        nav.δx[1:nav.ns] .+= Ks*δy
 
         # Covariance update (non-optimal gain with consider states)
         nav.P[1:nav.ns, 1:nav.ns] .-= Ks*Pyy*Ks'
         nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= Ks*Pxy[nav.ns+1:nav.nδ, :]'
-        nav.P[nav.ns+1:nav.nδ, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:nav.nδ]'
+        @inbounds for ir in nav.ns+1:nav.nδ, ic in 1:nav.ns
+            nav.P[ir, ic] = nav.P[ic, ir]       # Make it symmmetric
+        end
     end
 
     return δy, δz, isRejected
@@ -148,7 +181,7 @@ end
             # P[1:ns, 1:ns] -= Pyy * Ks * Ks'
             mul!(KsPyy, Ks, transpose(Ks))       # KsPyy = Ks * Ks'
             rmul!(KsPyy, Pyy)                    # KsPyy *= Pyy
-            nav.P[1:nav.ns, 1:nav.ns] .-= KsPyy # In-place subtraction
+            nav.P[1:nav.ns, 1:nav.ns] .-= KsPyy  # In-place subtraction
 
             # P[1:ns, ns+1:nδ] -= Ks * Pxy[ns+1:nδ, :]'
             mul!(KsPxyT, Ks, transpose(Pxy[nav.ns+1:nav.nδ]))       # KsPxyT = Ks * PxyδT
@@ -164,27 +197,6 @@ end
     return δy, δz, isRejected
 end
 
-"""
-    kalmanUpdate!(nav, t, y, h)
-
-Update state of the Kalman filter using the input measurement.
-
-Inputs include the measurement time ```t```, measurement ```y```,
-measurement equation function ```ŷ, R, H = h(t, x)```. When using SRUKF or UKF, the
-measurement function only needs to provide ```ŷ``` and ```R``` as outputs.
-"""
-function kalmanUpdate!(nav::NavStateEKF, t, y, h)
-    if nav.iter > 0
-        return kalmanUpdateIter!(nav, t, y, h, nav.iter)  # This is an IEKF
-    end
-
-    δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
-    nav.x .+= nav.δx
-    resetErrorState!(nav)
-
-    return δy, δz, isRejected
-end
-
 # This update routine implements an IKEF
 @views function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter)
     # Estimated measurement and jacobians
@@ -195,7 +207,7 @@ end
     # Measurement editing
     δy = y - ŷ
     δz = δy./sqrt.(diag(Pyy))                   # Normalized innovation
-    isRejected = maximum(abs.(δz)) > nav.σᵣ     # σ rejection threshold
+    isRejected = maximum(abs, δz) > nav.σᵣ     # σ rejection threshold
 
     # Update error state and covariance matrix
     Ks = zeros(nav.ns, length(y))
@@ -206,8 +218,9 @@ end
         @inbounds for i in 1:iter
             if i > 1
                 ŷ, R, H = h(t, xIter)
-                Pxy .= nav.P*H'
-                Pyy .= H*Pxy + R
+                mul!(Pxy, nav.P, H')
+                mul!(Pyy, H, Pxy)
+                Pyy .+= R
             end
 
             # State update
@@ -221,7 +234,9 @@ end
         # Covariance update (non-optimal gain with consider states)
         nav.P[1:nav.ns, 1:nav.ns] .-= Ks*Pyy*Ks'
         nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= Ks*Pxy[nav.ns+1:nav.nδ, :]'
-        nav.P[nav.ns+1:nav.nδ, 1:nav.ns] = nav.P[1:nav.ns, nav.ns+1:nav.nδ]'
+        @inbounds for ir in nav.ns+1:nav.nδ, ic in 1:nav.ns
+            nav.P[ir, ic] = nav.P[ic, ir]       # Make it symmmetric
+        end
     end
 
     return δy, δz, isRejected

@@ -4,11 +4,11 @@ module KalmanFilterEngine
 
 using LinearAlgebra#, ForwardDiff
 
-export generatePosDefMatrix, resetErrorState!, getStd, computeQd
+export generatePosDefMatrix, getStd, computeQd
 include("utils.jl")
 
 export NavState, AbstractNavState, getState
-export getCov, kalmanUpdate!, kalmanPropagate!, kalmanUpdateError!
+export getCov, kalmanUpdate!, kalmanPropagate!, kalmanUpdateError!, kalmanPropagateCov!
 include("NavState.jl")
 include("ekf.jl")
 include("udekf.jl")

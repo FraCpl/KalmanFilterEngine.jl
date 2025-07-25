@@ -93,7 +93,7 @@ end
     # Measurement editing
     δy = y - ŷ
     δz = δy./sqrt.(diag(Syy'*Syy))              # Normalized innovation
-    isRejected = maximum(abs.(δz)) > nav.σᵣ     # σ rejection threshold
+    isRejected = maximum(abs, δz) > nav.σᵣ     # σ rejection threshold
 
     # Update error state and covariance matrix
     if !isRejected

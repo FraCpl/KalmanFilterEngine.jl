@@ -44,12 +44,10 @@ end
 @inline function computeSigmaPoints!(nav::NavStateUKF)
     S = sqrt(nav.P)
     nav.X[1] = nav.x
-    @inbounds for i in 1:nav.L #eachrow(nav.S)
-        nav.X[i+1] .= nav.x + nav.γ*S[i, :]
-        nav.X[i+1+nav.L] .= nav.x - nav.γ*S[i, :]
+    @inbounds for i in 1:nav.L, j in 1:nav.L
+        nav.X[i+1][j] = nav.x[j] + nav.γ*S[i, j]
+        nav.X[i+1+nav.L][j] = nav.x[j] - nav.γ*S[i, j]
     end
-    # nav.X[2:nav.L+1] = [nav.x + nav.γ*S[i,:] for i in 1:nav.L]
-    # nav.X[nav.L+2:end] = [nav.x - nav.γ*S[i,:] for i in 1:nav.L]
 end
 
 function kalmanPropagate!(nav::NavStateUKF, Δt, f, Jf, Q; nSteps=1)
@@ -67,7 +65,7 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f, Jf, Q; nSteps=1)
     nav.P .= Q
     @inbounds for i in 1:2*nav.L+1
         δX = nav.X[i] - nav.x
-        nav.P += nav.Wc[i].*δX*δX'
+        nav.P .+= nav.Wc[i].*δX*δX'
     end
 end
 
@@ -97,7 +95,7 @@ end
     # Measurement editing
     δy = y - ŷ
     δz = δy./sqrt.(diag(Pyy))                   # Normalized innovation
-    isRejected = maximum(abs.(δz)) > nav.σᵣ     # σ rejection threshold
+    isRejected = maximum(abs, δz) > nav.σᵣ     # σ rejection threshold
 
     # Update error state and covariance matrix
     if !isRejected

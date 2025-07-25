@@ -23,19 +23,37 @@ end
 
 getCov(nav::NavStateUD) = nav.U*diagm(nav.D)*nav.U'
 
-@views function UD(P)
-    n = size(P, 1)
-    U = zero(P) + I
+@inline function UD(P)
+    U = zero(P)
     D = zero(P[:, 1])
+    UD!(U, D, P)
+    return U, D
+end
+
+function UD!(U, D, P)
+    n = size(P, 1)
+    U .= 0.0
+    @inbounds for i in 1:n
+        U[i, i] = 1.0
+    end
+    D .= 0.0
     D[end] = P[end]
     if abs(P[end]) > 1e-9
-        U[:, end] = P[:, end]./P[end]
+        @inbounds for i in 1:n
+            U[i, end] = P[i, end]/P[end]
+        end
     end
     @inbounds for j in n-1:-1:1
-        D[j] = P[j, j] - sum(D[j+1:n].*U[j, j+1:n].^2)
+        D[j] = P[j, j]
+        for k in j+1:n
+            D[j] -= D[k]*U[j, k]^2
+        end
         if D[j] > 0.0
             @inbounds for i in j-1:-1:1
-                U[i, j] = (P[i, j] - sum(D[j+1:n].*U[i, j+1:n].*U[j, j+1:n]))/D[j]
+                U[i, j] = P[i, j]/D[j]
+                @inbounds for k in j+1:n
+                    U[i, j] -= D[k]*U[i, k]*U[j, k]/D[j]
+                end
             end
         end
     end
@@ -100,8 +118,8 @@ end
     @inbounds for i in 2:n
         α = αOld + v[i]*f[i]
         D[i] = αOld/α*D̄[i]
-        U[:,i] = Ū[:,i] - f[i]/αOld*K̄
-        K̄ = K̄ + v[i]*Ū[:,i]
+        U[:, i] = Ū[:, i] - f[i]/αOld*K̄
+        K̄ = K̄ + v[i]*Ū[:, i]
         αOld = α
     end
     K = K̄./α     # Kopt
@@ -126,8 +144,8 @@ end
         D̄[j] = b[:, j]'*f
         f = f./D̄[j]
         @inbounds for i in 1:j-1
-            Ū[i,j] = b[:, i]'*f
-            b[:,i] = b[:, i] - Ū[i, j]*b[:, j]
+            Ū[i, j] = b[:, i]'*f
+            b[:, i] = b[:, i] - Ū[i, j]*b[:, j]
         end
     end
     D̄[1] = b[:, 1]'*(D̃.*b[:, 1])
@@ -162,8 +180,8 @@ end
 end
 
 function kalmanPropagate!(nav::NavStateUD, Δt, f, Jf, Q; nSteps=1)
-    nav.t, nav.x, Φ = kalmanOde(nav.t, nav.x, Δt, f, Jf, nav.nδ; nSteps=nSteps)
-    nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, size(nav.x, 1))
+    Φ = kalmanPropagateState!(nav, Δt, f, Jf; nSteps=nSteps)
+    nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, size(nav.x, 1))  # TODO: update nc: number of fully correlated states
 end
 
 # function kalmanPropagate!(nav::NavStateUD, Δt, f, Q; nSteps=1)
@@ -273,7 +291,7 @@ end
 
             # Perform Agee-Turner rank-one update to account for consider states
             if nx > nav.ns
-                nav.U, nav.D = ageeTurnerUpdate(nav.U,nav.D,α,[zeros(nav.ns); K[nav.ns+1:nav.nδ]]);
+                nav.U, nav.D = ageeTurnerUpdate(nav.U, nav.D, α, [zeros(nav.ns); K[nav.ns+1:nav.nδ]]);
             end
 
             nav.δx[1:nav.ns] += K[1:nav.ns]*δy[i]
@@ -286,6 +304,6 @@ end
 function kalmanUpdate!(nav::NavStateUD, t, y, h)
     δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
     nav.x .+= nav.δx
-    resetErrorState!(nav)
+    nav.δx .= 0.0       # reset error state
     return δy, δz, isRejected
 end

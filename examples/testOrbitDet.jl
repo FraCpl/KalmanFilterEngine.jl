@@ -56,7 +56,7 @@ function main(;showplot=true)
         # Generate measurement at t[k]
         ty = (k - 1)*Δt
         y, R, ~ = h(ty, x)
-        y = y + rand(MvNormal(R))
+        y .+= rand(MvNormal(R))
 
         # Perform Kalman Filter step, i.e., update x̂[k] and propagate to x̂[k+1]
         kalmanFilter!(nav, Δt, ty, y, Q)

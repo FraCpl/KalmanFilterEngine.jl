@@ -41,10 +41,8 @@ function main(;showplot=true)
     x̂₀ = [6370e3+500e3; 0.0; 0.0; 0.0; 1.1*sqrt(3.986e14/(6370e3+500e3)); 532.2; zeros(3)]
     P₀ = diagm([1.0e3; 1.0e3; 1.0e3; 1.0e2; 1.0e2; 1.0e2; 0.7; 0.7; 0.7].^2)
 
-    nav = NavState(0.0, x̂₀, P₀)
-    navS = NavState(0.0, x̂₀, P₀)
-    nav.ns = 6
-    navS.ns = 6
+    nav = NavState(0.0, x̂₀, P₀, 6)
+    navS = NavState(0.0, x̂₀, P₀, 6)
 
     Δt = 100.0
     Q = computeQd([zeros(3, 3) I zeros(3, 3); zeros(6, 9)], [zeros(3, 3); I; zeros(3, 3)], 0.01I, Δt)

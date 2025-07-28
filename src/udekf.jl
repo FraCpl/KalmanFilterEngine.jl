@@ -15,10 +15,10 @@ end
 Build UDEKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateUD(t, x, P)
+function NavStateUD(t, x, P, ns=size(P, 1))
     U, D = UD(P)
     nδ = size(U, 1)
-    return NavStateUD(t, x, U, D, zero(P[:, 1]), nδ, 6, nδ)
+    return NavStateUD(t, x, U, D, zero(P[:, 1]), ms, 6, nδ)
 end
 
 getCov(nav::NavStateUD) = nav.U*diagm(nav.D)*nav.U'

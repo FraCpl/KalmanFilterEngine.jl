@@ -17,12 +17,12 @@ end
 Build SRUKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateSRUKF(t, x, P; α=1e-3, β=2.0, κ=0.0)
+function NavStateSRUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
     S = cholesky(P).U.data
     L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
 
-    return NavStateSRUKF(t, x, S, L, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:2L+1])
+    return NavStateSRUKF(t, x, S, ns, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:2L+1])
 end
 
 getCov(nav::NavStateSRUKF) = nav.S'*nav.S

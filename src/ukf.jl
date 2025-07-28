@@ -17,11 +17,11 @@ end
 Build UKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateUKF(t, x, P; α=1e-3, β=2.0, κ=0.0)
+function NavStateUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
     L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
 
-    return NavStateUKF(t, x, P, L, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:2L+1])
+    return NavStateUKF(t, x, P, ns, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:2L+1])
 end
 
 @inline function getCov(nav::NavStateUKF)

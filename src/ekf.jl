@@ -15,9 +15,9 @@ end
 Build EKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateEKF(t, x, P; iter=0)
+function NavStateEKF(t, x, P, ns=size(P, 1); iter=0)
     nδ = size(P, 1)
-    return NavStateEKF(t, x, P, zero(P[:, 1]), nδ, 6, nδ, iter)     # we do 0*P[:, 1] for compatibilty with ComponentArrays
+    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, 6, nδ, iter)     # we do 0*P[:, 1] for compatibilty with ComponentArrays
 end
 
 """

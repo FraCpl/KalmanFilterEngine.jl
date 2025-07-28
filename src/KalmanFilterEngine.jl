@@ -8,7 +8,7 @@ export generatePosDefMatrix, getStd, computeQd
 include("utils.jl")
 
 export NavState, AbstractNavState, getState
-export getCov, kalmanUpdate!, kalmanPropagate!, kalmanUpdateError!, kalmanPropagateCov!
+export getCov, kalmanUpdate!, kalmanPropagate!, kalmanUpdateError!, kalmanPropagateCov!, kalmanUpdateErrorScalar!
 include("NavState.jl")
 include("ekf.jl")
 include("udekf.jl")

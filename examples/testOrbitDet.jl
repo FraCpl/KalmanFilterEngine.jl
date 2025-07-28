@@ -7,7 +7,7 @@ using LinearAlgebra
 using GLMakie
 using Random
 using JTools
-y
+
 #=
 # Define Navigation Problem - OD1
 f(t, x) = [x[4:6]; -3.986e14/norm(x[1:3])^3*x[1:3]]

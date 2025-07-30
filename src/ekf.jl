@@ -6,7 +6,6 @@ mutable struct NavStateEKF{T<:AbstractVector{Float64}, M<:AbstractMatrix{Float64
     ns::Int64               # Number of solve for (error) states
     σᵣ::Int64               # Outlier rejection threshold
     nδ::Int64               # Number of error states
-    iter::Int64             # Number of iterations for IEKF
 
     # Internal allocation variables
     KPyyK::Matrix{Float64}
@@ -21,9 +20,9 @@ end
 Build EKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateEKF(t, x, P, ns=size(P, 1); iter=0)
+function NavStateEKF(t, x, P, ns=size(P, 1))
     nδ = size(P, 1)
-    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, 6, nδ, iter,
+    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, 6, nδ,
         zeros(ns, ns), zeros(ns, nδ - ns), zeros(ns), zeros(nδ))
 end
 
@@ -51,6 +50,7 @@ dynamics. This function is only applicable to EKF and UDEKF.
 function kalmanPropagate!(nav::NavStateEKF, Δt, f, Jf, Q; nSteps=1)
     Φ = kalmanPropagateState!(nav, Δt, f, Jf; nSteps=nSteps)
     kalmanPropagateCov!(nav, Φ, Q)
+    return
 end
 
 # This function propagates the full navigation state from the current
@@ -97,15 +97,51 @@ measurement equation function ```ŷ, R, H = h(t, x)```. When using SRUKF or UKF
 measurement function only needs to provide ```ŷ``` and ```R``` as outputs.
 """
 function kalmanUpdate!(nav::NavStateEKF, t, y, h)
-    if nav.iter > 0
-        return kalmanUpdateIter!(nav, t, y, h, nav.iter)  # This is an IEKF
-    end
 
     δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
     nav.x .+= nav.δx
     nav.δx .= 0.0       # reset error state
 
     return δy, δz, isRejected
+end
+
+function kalmanUpdate!(nav::NavStateEKF, y, ŷ, R, H,
+        δy = zero(y),                                                       # Save allocations
+        δz = zero(y),                                                       # Save allocations
+        Pxy = Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)),              # Save allocations
+        Pyy = Matrix{eltype(nav.P)}(undef, size(R)),                        # Save allocations
+        PyyK = Matrix{eltype(nav.P)}(undef, length(y), nav.ns),             # Save allocations
+    )
+
+    nav.δx .= 0.0       # Better safe than sorry
+    isRejected = kalmanUpdateError!(nav, y, ŷ, R, H, δy, δz, Pxy, Pyy, PyyK)
+    nav.x .+= nav.δx
+    nav.δx .= 0.0       # reset error state
+
+    return isRejected
+end
+
+function kalmanUpdateScalar!(nav::NavStateEKF, t, y, h)
+
+    nav.δx .= 0.0       # Better safe than sorry
+    δy, δz, isRejected = kalmanUpdateErrorScalar!(nav, t, y, h)
+    nav.x .+= nav.δx
+    nav.δx .= 0.0       # reset error state
+
+    return δy, δz, isRejected
+end
+
+function kalmanUpdateScalar!(nav::NavStateEKF, y, ŷ, R, H,
+        δy = zero(y),                                                       # Save allocations
+        δz = zero(y),                                                       # Save allocations
+    )
+
+    nav.δx .= 0.0       # Better safe than sorry
+    isRejected = kalmanUpdateErrorScalar!(nav, y, ŷ, R, H, δy, δz)
+    nav.x .+= nav.δx
+    nav.δx .= 0.0       # reset error state
+
+    return  isRejected
 end
 
 """
@@ -252,12 +288,13 @@ end
     return isRejected
 end
 
-# This update routine implements an IKEF
+# This update routine implements an IEKF
 @views function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter)
     # Estimated measurement and jacobians
     ŷ, R, H = h(t, nav.x)
     Pxy = nav.P*H'
     Pyy = H*Pxy + R
+    Pyy .+= R
 
     # Measurement editing
     δy = y - ŷ
@@ -288,7 +325,9 @@ end
 
         # Covariance update (non-optimal gain with consider states)
         nav.P[1:nav.ns, 1:nav.ns] .-= Ks*Pyy*Ks'
-        nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= Ks*Pxy[nav.ns+1:nav.nδ, :]'
+        Main.dbg = nav, Ks, Pxy
+        mul!(nav.KPyx, Ks, transpose(Pxy[nav.ns+1:nav.nδ, :]))    # KPyx = Ks*Pxyᵀ
+        nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= nav.KPyx             # In-place subtraction
         @inbounds for ir in nav.ns+1:nav.nδ, ic in 1:nav.ns
             nav.P[ir, ic] = nav.P[ic, ir]       # Make it symmmetric
         end

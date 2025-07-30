@@ -30,19 +30,26 @@ function main()
     #f(t, x) = Jf(t, x)*x
     Φ = exp(Jf(0.0, zeros(6)).*Δt)
     rangeLosMeas(x) = [norm(x[1:3]); atan(x[2], x[1]); asin(x[3]/norm(x[1:3]))]
-    h(t, x) = (rangeLosMeas(x), diagm([0.1; 0.1π/180; 0.1π/180].^2), ForwardDiff.jacobian(rangeLosMeas, x))  # ỹ, R, H
+    function jac(X)
+        x, y, z, ~, ~, ~ = X
+        rip2 = x*x + y*y
+        r2 = rip2 + z*z
+        c2 = 1/r2/sqrt(rip2)
+        r = sqrt(r2)
+        return [x/r y/r z/r 0 0 0; -y/rip2 x/rip2 0 0 0 0; -c2*x*z -c2*y*z c2*rip2 0 0 0]
+    end
+    h(t, x) = (rangeLosMeas(x), diagm([0.1; 0.1π/180; 0.1π/180].^2), jac(x))#ForwardDiff.jacobian(rangeLosMeas, x))  # ỹ, R, H
 
     # Define Kalman filter
     function kalmanFilter!(nav, Δt, ty, y, Q)
         # Update step at t[k-1] with y[k-1]
-        kalmanUpdate!(nav, ty, y, h)
-        if hasfield(typeof(nav), :P); nav.P = 0.5(nav.P + nav.P') end       # Sym P
+        kalmanUpdateIter!(nav, ty, y, h, 3)
+        # nav.P .= 0.5(nav.P + nav.P')
 
         # Propagate state from t[k-1] to t[k]
-        nav.t += Δt
         nav.x .= Φ*nav.x
-        nav.P .= Φ*nav.P*Φ' + Q
-        #kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps=5)    # [SHOULD USE THIS FOR UKF] Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
+        nav.t += Δt
+        kalmanPropagateCov!(nav, Φ, Q)
     end
 
     function trueDyn(t, x)
@@ -79,7 +86,7 @@ function main()
     for nSim in 1:100
         @show nSim
         x̂₀ = x₀ + rand(MvNormal(P₀))
-        nav = NavState(0.0, x̂₀, P₀; type=:IEKF, iter=3)
+        nav = NavState(0.0, x̂₀, P₀)
         x = copy(x₀)
         X = [x]; T = [0.0];
         X̂ = [getState(nav)]; σ = [getStd(nav)];

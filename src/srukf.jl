@@ -115,13 +115,15 @@ end
 @views function cholupdate!(S, x, signx=1.0)
     n = length(x)
     @inbounds for k in 1:n
-        r = sqrt(S[k, k]^2 + signx*x[k]^2)
+        r = sqrt(S[k, k]^2 + signx*x[k]*x[k])
         c = r/S[k, k]
         s = x[k]/S[k, k]
         S[k, k] = r
         if k < n
-            S[k, k+1:n] = (S[k, k+1:n] + signx*s*x[k+1:n])/c
-            x[k+1:n] = c*x[k+1:n] - s*S[k, k+1:n]
+            @inbounds for j in k+1:n
+                S[k, j] = (S[k, j] + signx*s*x[j])/c
+                x[j] = c*x[j] - s*S[k, j]
+            end
         end
     end
 end

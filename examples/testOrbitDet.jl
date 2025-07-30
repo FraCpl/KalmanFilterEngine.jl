@@ -22,8 +22,12 @@ Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
 h(t, x) = (x[1:3], diagm([10.0; 10.0; 10.0].^2), [I zeros(3, 3)])  # ỹ, R, H
 
 # Define Kalman filter
-function kalmanFilter!(nav, Δt, ty, y, Q)
-    kalmanUpdate!(nav, ty, y, h)                                        # Update step at t[k-1] with y[k-1]
+function kalmanFilter!(nav, Δt, ty, y, Q, iter=0)
+    if iter == 0
+        kalmanUpdate!(nav, ty, y, h)                                        # Update step at t[k-1] with y[k-1]
+    else
+        kalmanUpdateIter!(nav, ty, y, h, iter)
+    end
     if hasfield(typeof(nav), :P); nav.P = 0.5(nav.P + nav.P') end       # Sym P
     kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps = ceil(Int, Δt/10.0))    # Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
 end
@@ -39,7 +43,7 @@ function main(;showplot=true)
     navUD = NavState(0.0, x̂₀, P₀; type=:UD)
     navUKF = NavState(0.0, x̂₀, P₀; type=:UKF)
     navSRUKF = NavState(0.0, x̂₀, P₀; type=:SRUKF)
-    navIEKF = NavState(0.0, x̂₀, P₀; type=:IEKF)
+    navIEKF = NavState(0.0, x̂₀, P₀)
 
     Δt = 100.0
     Q = computeQd([zeros(3,3) I; zeros(3, 6)], [zeros(3, 3); I], 0.01I, Δt)
@@ -63,7 +67,7 @@ function main(;showplot=true)
         kalmanFilter!(navUD, Δt, ty, y, Q)
         kalmanFilter!(navUKF, Δt, ty, y, Q)
         kalmanFilter!(navSRUKF, Δt, ty, y, Q)
-        kalmanFilter!(navIEKF, Δt, ty, y, Q)
+        kalmanFilter!(navIEKF, Δt, ty, y, Q, 3)
 
         # Propagate true dynamics from x[k] to x[k+1]
         #sol = solve(ODEProblem((x, p, t) -> f(t, x), x, (0, Δt)))

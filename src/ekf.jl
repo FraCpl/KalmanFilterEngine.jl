@@ -7,6 +7,12 @@ mutable struct NavStateEKF{T<:AbstractVector{Float64}, M<:AbstractMatrix{Float64
     σᵣ::Int64               # Outlier rejection threshold
     nδ::Int64               # Number of error states
     iter::Int64             # Number of iterations for IEKF
+
+    # Internal allocation variables
+    KPyyK::Matrix{Float64}
+    KPyx::Matrix{Float64}
+    xs::Vector{Float64}
+    pxy::Vector{Float64}
 end
 
 """
@@ -17,7 +23,8 @@ state and navigation covariance matrix.
 """
 function NavStateEKF(t, x, P, ns=size(P, 1); iter=0)
     nδ = size(P, 1)
-    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, 6, nδ, iter)     # we do 0*P[:, 1] for compatibilty with ComponentArrays
+    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, 6, nδ, iter,
+        zeros(ns, ns), zeros(ns, nδ - ns), zeros(ns), zeros(nδ))
 end
 
 """
@@ -129,10 +136,7 @@ end
         δz = zero(y),                                                       # Save allocations
         Pxy = Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)),              # Save allocations
         Pyy = Matrix{eltype(nav.P)}(undef, size(R)),                        # Save allocations
-        xs = Vector{Float64}(undef, nav.ns),                                # Save allocations
         PyyK = Matrix{eltype(nav.P)}(undef, length(y), nav.ns),             # Save allocations
-        KPyyK = Matrix{eltype(nav.P)}(undef, nav.ns, nav.ns),               # Save allocations
-        KPxyT = Matrix{eltype(nav.P)}(undef, nav.ns, nav.nδ - nav.ns),      # Save allocations
     )
 
     isRejected = false
@@ -167,15 +171,15 @@ end
     if !isRejected
         # Error state update
         Ks = Pxy[1:nav.ns, :]/Pyy    # Kalman Gain
-        mul!(xs, Ks, δy)
-        nav.δx[1:nav.ns] .+= xs
+        mul!(nav.xs, Ks, δy)
+        nav.δx[1:nav.ns] .+= nav.xs
 
         # Covariance update (non-optimal gain with consider states)
         mul!(PyyK, Pyy, transpose(Ks))
-        mul!(KPyyK, Ks, PyyK)
-        nav.P[1:nav.ns, 1:nav.ns] .-= KPyyK         # Ks*Pyy*Ks'
-        mul!(KPxyT, Ks, transpose(Pxy[nav.ns+1:nav.nδ, :]))
-        nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= KPxyT
+        mul!(nav.KPyyK, Ks, PyyK)
+        nav.P[1:nav.ns, 1:nav.ns] .-= nav.KPyyK         # Ks*Pyy*Ks'
+        mul!(nav.KPyx, Ks, transpose(Pxy[nav.ns+1:nav.nδ, :]))
+        nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= nav.KPyx
         @inbounds for ir in nav.ns+1:nav.nδ, ic in 1:nav.ns
             nav.P[ir, ic] = nav.P[ic, ir]       # Make it symmmetric
         end
@@ -200,12 +204,10 @@ end
 @views function kalmanUpdateErrorScalar!(nav::NavStateEKF, y, ŷ, R, H,
         δy = zero(y),                                                       # Save allocations
         δz = zero(y),                                                       # Save allocations
-        Pxy = Vector{eltype(nav.P)}(undef, nav.nδ),                         # Save allocations
-        Ks = Vector{eltype(nav.P)}(undef, nav.ns),                          # Save allocations
-        KPyyK = Matrix{eltype(nav.P)}(undef, nav.ns, nav.ns),               # Save allocations
-        KPxyT = Matrix{eltype(nav.P)}(undef, nav.ns, nav.nδ - nav.ns),      # Save allocations
     )
     isRejected = false
+    Ks = nav.xs
+    Pxy = nav.pxy
 
     @inbounds for i in eachindex(y)
         # Estimated measurement and jacobians
@@ -232,13 +234,13 @@ end
 
             # Covariance update (non-optimal gain with consider states)
             # P[1:ns, 1:ns] -= Pyy * Ks * Ks'
-            mul!(KPyyK, Ks, transpose(Ks))       # KPyyK = Ks * Ks'
-            rmul!(KPyyK, Pyy)                    # KPyyK *= Pyy
-            nav.P[1:nav.ns, 1:nav.ns] .-= KPyyK  # In-place subtraction
+            mul!(nav.KPyyK, Ks, transpose(Ks))       # KPyyK = Ks * Ks'
+            rmul!(nav.KPyyK, Pyy)                    # KPyyK *= Pyy
+            nav.P[1:nav.ns, 1:nav.ns] .-= nav.KPyyK  # In-place subtraction
 
             # P[1:ns, ns+1:nδ] -= Ks * Pxy[ns+1:nδ, :]'
-            mul!(KPxyT, Ks, transpose(Pxy[nav.ns+1:nav.nδ]))       # KPxyT = Ks*Pxyᵀ
-            nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= KPxyT             # In-place subtraction
+            mul!(nav.KPyx, Ks, transpose(Pxy[nav.ns+1:nav.nδ]))       # KPyx = Ks*Pxyᵀ
+            nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= nav.KPyx             # In-place subtraction
 
             # nav.P[nav.ns+1:nav.nδ, 1:nav.ns] .= transpose(nav.P[1:nav.ns, nav.ns+1:nav.nδ])
             @inbounds for ir in nav.ns+1:nav.nδ, ic in 1:nav.ns

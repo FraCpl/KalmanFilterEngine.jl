@@ -8,7 +8,7 @@ function TEST_UD()
     P = generatePosDefMatrix(n)
     U, D = KalmanFilterEngine.UD(P)
     ε = U*diagm(D)*U' - P
-    return  maximum(abs.(ε))
+    return maximum(abs.(ε))
 end
 
 function TEST_generatePosDefMatrix()
@@ -27,7 +27,7 @@ function TEST_ageeTurnerUpdate()
     x = randn(n)
 
     Ũ, D̃ = KalmanFilterEngine.ageeTurnerUpdate(U, D, c, x)
-    ε = Ũ*diagm(D̃)*Ũ' - (P + c.*x*x')
+    ε = Ũ*diagm(D̃)*Ũ' - (P + c .* x*x')
     return maximum(abs.(ε))
 end
 
@@ -35,7 +35,7 @@ function TEST_carlsonUpdate()
     n = 7
     P = generatePosDefMatrix(n)
     Ū, D̄ = KalmanFilterEngine.UD(P)
-    H = randn(1,n)
+    H = randn(1, n)
     R = abs(randn())
 
     K, U, D, α = KalmanFilterEngine.carlsonUpdate(Ū, D̄, H[:], R)
@@ -48,11 +48,11 @@ end
 function TEST_modGramSchmidt()
     n = 11
     nw = 7
-    Φ = randn(n,n)
+    Φ = randn(n, n)
     P = generatePosDefMatrix(n)
     U, D = KalmanFilterEngine.UD(P)
     Q = abs.(randn(nw))
-    Φw = randn(n,nw)
+    Φw = randn(n, nw)
 
     Ū, D̄ = KalmanFilterEngine.modGramSchmidt(Φ, U, D, Φw, Q)
     ε1 = Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Φw*diagm(Q)*Φw')
@@ -75,7 +75,13 @@ function TEST_kalmanOde()
     Torb = 2π*sqrt(sma^3/μ)
 
     f(x, μ) = [x[4:6]; -μ/norm(x[1:3])^3*x[1:3]]
-    x = KalmanFilterEngine.odeCore(0.0, x0, Torb, (t,x) -> f(x,μ); nSteps=ceil(Int,Torb/1.0))
+    x = KalmanFilterEngine.odeCore(
+        0.0,
+        x0,
+        Torb,
+        (t, x) -> f(x, μ);
+        nSteps = ceil(Int, Torb/1.0),
+    )
 
     return norm(x[1:3] - x0[1:3]) < 100.0
 end
@@ -84,7 +90,7 @@ function TEST_UDpropagate1()
     n = 9
     P = generatePosDefMatrix(n)
     U, D = KalmanFilterEngine.UD(P)
-    Φ = randn(n,n)
+    Φ = randn(n, n)
     nc = n
 
     # Case 1: full correlation, diagonal Qxx
@@ -101,7 +107,7 @@ function TEST_kalmanOdeSTM()
     x0 = [randn(3); randn(3)]
     Φ0 = Matrix(1.0I, 6, 6)
     Δt = 3.760
-    @time x, Φ = KalmanFilterEngine.odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
+    @time x, Φ = KalmanFilterEngine.odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps = 1)
     xTrue = [x0[1:3] + x0[4:6]*Δt; x0[4:6]]
     ΦTrue = I + [zeros(3, 3) Δt*I; zeros(3, 6)]
 
@@ -112,7 +118,7 @@ function TEST_UDpropagate2()
     n = 9
     P = generatePosDefMatrix(n)
     U, D = KalmanFilterEngine.UD(P)
-    Φ = randn(n,n)
+    Φ = randn(n, n)
     nc = n
 
     # Case 2: full correlation, full Qxx
@@ -126,11 +132,11 @@ function TEST_UDpropagate2b()
     P = generatePosDefMatrix(n)
     U, D = KalmanFilterEngine.UD(P)
     Δt = 0.1
-    Φ = exp([zeros(3,3) I; zeros(3,6)].*Δt)
+    Φ = exp([zeros(3, 3) I; zeros(3, 6)] .* Δt)
     nc = n
 
     # Case 2: full correlation, full Qxx
-    Q = computeQd([zeros(3,3) I; zeros(3,6)], [zeros(3,3); I], 0.01I, Δt)
+    Q = computeQd([zeros(3, 3) I; zeros(3, 6)], [zeros(3, 3); I], 0.01I, Δt)
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
     return maximum(abs.(Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Q)))
 end
@@ -142,8 +148,8 @@ function TEST_UDpropagate3()
 
     # Case 3: full correlation, Noiseless
     nc = n
-    Φ = randn(n,n)
-    Q = zeros(n,n)
+    Φ = randn(n, n)
+    Q = zeros(n, n)
 
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
     return maximum(abs.(Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Q)))
@@ -158,13 +164,13 @@ function TEST_UDpropagate4()
     # covariance matrix P = [Pcc Pcn; Pnc Pnn] with Pnn diagonal and Pcn ≠ 0.
     n = 9
     nc = 6
-    Φ = [randn(nc,n); zeros(n-nc,nc) diagm(exp.(-abs.(randn(n-nc))))]
-    P = [generatePosDefMatrix(nc) zeros(nc,n-nc); zeros(n-nc,nc) diagm(abs.(randn(n-nc)))]
+    Φ = [randn(nc, n); zeros(n-nc, nc) diagm(exp.(-abs.(randn(n-nc))))]
+    P = [generatePosDefMatrix(nc) zeros(nc, n-nc); zeros(n-nc, nc) diagm(abs.(randn(n-nc)))]
     P = Φ*P*Φ'
     P = 0.5(P + P')
     U, D = KalmanFilterEngine.UD(P)
 
-    Q = [generatePosDefMatrix(nc) zeros(nc,n-nc); zeros(n-nc,nc) diagm(abs.(randn(n-nc)))]
+    Q = [generatePosDefMatrix(nc) zeros(nc, n-nc); zeros(n-nc, nc) diagm(abs.(randn(n-nc)))]
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
     return maximum(abs.(Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Q)))
 end
@@ -172,15 +178,18 @@ end
 function TEST_UDpropagate5()
     n = 9
     nc = 6
-    Φ = [randn(nc,n); zeros(n-nc,nc) diagm(exp.(-abs.(randn(n-nc))))]
-    P = [generatePosDefMatrix(nc) zeros(nc,n-nc); zeros(n-nc,nc) diagm(abs.(randn(n-nc)))]
+    Φ = [randn(nc, n); zeros(n-nc, nc) diagm(exp.(-abs.(randn(n-nc))))]
+    P = [generatePosDefMatrix(nc) zeros(nc, n-nc); zeros(n-nc, nc) diagm(abs.(randn(n-nc)))]
     P = Φ*P*Φ'
     P = 0.5(P + P')
     U, D = KalmanFilterEngine.UD(P)
 
     # Case 5: partial correlation with some zero process noise terms in
     # the non-correlated terms
-    Q = [generatePosDefMatrix(nc) zeros(nc,n-nc); zeros(n-nc,nc) diagm(abs.([.0; randn(n-nc-1)]))]
+    Q = [
+        generatePosDefMatrix(nc) zeros(nc, n-nc);
+        zeros(n-nc, nc) diagm(abs.([0.0; randn(n-nc-1)]))
+    ]
     Ū, D̄ = KalmanFilterEngine.UDpropagate(U, D, Φ, Q, nc)
     return maximum(abs.(Ū*diagm(D̄)*Ū' - (Φ*P*Φ' + Q)))
 end
@@ -189,8 +198,9 @@ function TEST_cholupdate(sgn)
     n = 8
     S = cholesky(generatePosDefMatrix(n)).U
     x = 0.3*randn(n)
-    V = copy(S); y = copy(x)
-    KalmanFilterEngine.cholupdate!(V,y,sgn)
+    V = copy(S);
+    y = copy(x)
+    KalmanFilterEngine.cholupdate!(V, y, sgn)
     Vtrue = cholesky(S'*S + sgn*x*x').U
     maximum(abs.(Vtrue - V))
 end
@@ -200,15 +210,15 @@ function TEST_simpleKalman(type::Symbol)
     x₀ = zeros(6)
     Δt = 0.35
     x̂₀ = x₀ + rand(MvNormal(P₀))
-    Φ = I + [zeros(3,3) Δt*I; zeros(3,6)]
+    Φ = I + [zeros(3, 3) Δt*I; zeros(3, 6)]
 
     f(t, x) = [x[4:6]; zeros(3)]
-    Jf(t, x) = [zeros(3,3) I; zeros(3,6)]
-    h(t, x) = (x[1:3], 0.483*Matrix(I,3,3), [I zeros(3,3)])
-    Q = computeQd(Jf(0.0,zeros(6)), [zeros(3,3); I], 0.005616*Matrix(I,3,3), Δt)
-    dummy, R, H = h(0,zeros(6))
+    Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
+    h(t, x) = (x[1:3], 0.483*Matrix(I, 3, 3), [I zeros(3, 3)])
+    Q = computeQd(Jf(0.0, zeros(6)), [zeros(3, 3); I], 0.005616*Matrix(I, 3, 3), Δt)
+    dummy, R, H = h(0, zeros(6))
 
-    nav = NavState(0.0, x̂₀, P₀; type=type)
+    nav = NavState(0.0, x̂₀, P₀; type = type)
 
     function klm!(nav, y)
         kalmanUpdate!(nav, 0.0, y, h)
@@ -231,7 +241,7 @@ function TEST_simpleKalman(type::Symbol)
     x = copy(x₀)
     x̂ = copy(x̂₀)
     P = copy(P₀)
-    for _ in 1:100
+    for _ = 1:100
         y = H*x + rand(MvNormal(R))     # Generate measurement
         klm!(nav, y)                    # Execute Kalman step
         x̂, P = klmSimple(x̂, P, y)       # Execute Kalman step (simple)

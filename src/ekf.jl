@@ -1,4 +1,8 @@
-mutable struct NavStateEKF{T<:AbstractVector{Float64}, M<:AbstractMatrix{Float64}, D<:AbstractVector{Float64}} <: AbstractNavState
+mutable struct NavStateEKF{
+    T<:AbstractVector{Float64},
+    M<:AbstractMatrix{Float64},
+    D<:AbstractVector{Float64},
+} <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
     x::T                    # Full estimated state, x[t]
     P::M                    # Covariance Matrix, P[t]
@@ -20,10 +24,21 @@ end
 Build EKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateEKF(t, x, P, ns=size(P, 1))
+function NavStateEKF(t, x, P, ns = size(P, 1))
     nδ = size(P, 1)
-    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, 6, nδ,
-        zeros(ns, ns), zeros(ns, nδ - ns), zeros(ns), zeros(nδ))
+    return NavStateEKF(
+        t,
+        x,
+        P,
+        zero(P[:, 1]),
+        ns,
+        6,
+        nδ,
+        zeros(ns, ns),
+        zeros(ns, nδ - ns),
+        zeros(ns),
+        zeros(nδ),
+    )
 end
 
 """
@@ -47,8 +62,8 @@ covariance matrix ```Q```. The optional keyword argument ```nSteps``` indicates 
 number of RK4 steps to be performed when numerically integrating the system's
 dynamics. This function is only applicable to EKF and UDEKF.
 """
-function kalmanPropagate!(nav::NavStateEKF, Δt, f, Jf, Q; nSteps=1)
-    Φ = kalmanPropagateState!(nav, Δt, f, Jf; nSteps=nSteps)
+function kalmanPropagate!(nav::NavStateEKF, Δt, f, Jf, Q; nSteps = 1)
+    Φ = kalmanPropagateState!(nav, Δt, f, Jf; nSteps = nSteps)
     kalmanPropagateCov!(nav, Φ, Q)
     return
 end
@@ -57,15 +72,16 @@ end
 # time to the current time plus Δt using a Runge-Kutta algorithm. It
 # also computes the state transition matrix by numerical integration
 # of the Jacobian of the dynamics.
-function kalmanPropagateState!(nav, Δt, f, Jf; nSteps=1)
-    nav.x, Φ = odeCore(nav.t, nav.x, Matrix(1.0I, nav.nδ, nav.nδ), Δt, f, Jf; nSteps=nSteps)
+function kalmanPropagateState!(nav, Δt, f, Jf; nSteps = 1)
+    nav.x, Φ =
+        odeCore(nav.t, nav.x, Matrix(1.0I, nav.nδ, nav.nδ), Δt, f, Jf; nSteps = nSteps)
     nav.t += Δt
     return Φ
 end
 
 # This function implements the covariance propagation formula
 # P[k+1] = ϕ*P[k]*ϕᵀ + Q
-function kalmanPropagateCov!(nav::NavStateEKF, Φ, Q, tmp=similar(nav.P))
+function kalmanPropagateCov!(nav::NavStateEKF, Φ, Q, tmp = similar(nav.P))
     mul!(tmp, nav.P, transpose(Φ))
     mul!(nav.P, Φ, tmp)
     nav.P .+= Q
@@ -105,13 +121,18 @@ function kalmanUpdate!(nav::NavStateEKF, t, y, h)
     return δy, δz, isRejected
 end
 
-function kalmanUpdate!(nav::NavStateEKF, y, ŷ, R, H,
-        δy = zero(y),                                                       # Save allocations
-        δz = zero(y),                                                       # Save allocations
-        Pxy = Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)),              # Save allocations
-        Pyy = Matrix{eltype(nav.P)}(undef, size(R)),                        # Save allocations
-        PyyK = Matrix{eltype(nav.P)}(undef, length(y), nav.ns),             # Save allocations
-    )
+function kalmanUpdate!(
+    nav::NavStateEKF,
+    y,
+    ŷ,
+    R,
+    H,
+    δy = zero(y),                                                       # Save allocations
+    δz = zero(y),                                                       # Save allocations
+    Pxy = Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)),              # Save allocations
+    Pyy = Matrix{eltype(nav.P)}(undef, size(R)),                        # Save allocations
+    PyyK = Matrix{eltype(nav.P)}(undef, length(y), nav.ns),             # Save allocations
+)
 
     nav.δx .= 0.0       # Better safe than sorry
     isRejected = kalmanUpdateError!(nav, y, ŷ, R, H, δy, δz, Pxy, Pyy, PyyK)
@@ -131,17 +152,22 @@ function kalmanUpdateScalar!(nav::NavStateEKF, t, y, h)
     return δy, δz, isRejected
 end
 
-function kalmanUpdateScalar!(nav::NavStateEKF, y, ŷ, R, H,
-        δy = zero(y),                                                       # Save allocations
-        δz = zero(y),                                                       # Save allocations
-    )
+function kalmanUpdateScalar!(
+    nav::NavStateEKF,
+    y,
+    ŷ,
+    R,
+    H,
+    δy = zero(y),                                                       # Save allocations
+    δz = zero(y),                                                       # Save allocations
+)
 
     nav.δx .= 0.0       # Better safe than sorry
     isRejected = kalmanUpdateErrorScalar!(nav, y, ŷ, R, H, δy, δz)
     nav.x .+= nav.δx
     nav.δx .= 0.0       # reset error state
 
-    return  isRejected
+    return isRejected
 end
 
 """
@@ -158,7 +184,8 @@ to EKF and UDEKF.
     ŷ, R, H = h(t, nav.x)
 
     # Allocate innovation and normalized innovation
-    δy = zero(y); δz = zero(y)
+    δy = zero(y);
+    δz = zero(y)
 
     # Perform kalman update
     isRejected = kalmanUpdateError!(nav, y, ŷ, R, H, δy, δz)
@@ -167,13 +194,18 @@ to EKF and UDEKF.
     return δy, δz, isRejected
 end
 
-@views function kalmanUpdateError!(nav::NavStateEKF, y, ŷ, R, H,
-        δy = zero(y),                                                       # Save allocations
-        δz = zero(y),                                                       # Save allocations
-        Pxy = Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)),              # Save allocations
-        Pyy = Matrix{eltype(nav.P)}(undef, size(R)),                        # Save allocations
-        PyyK = Matrix{eltype(nav.P)}(undef, length(y), nav.ns),             # Save allocations
-    )
+@views function kalmanUpdateError!(
+    nav::NavStateEKF,
+    y,
+    ŷ,
+    R,
+    H,
+    δy = zero(y),                                                       # Save allocations
+    δz = zero(y),                                                       # Save allocations
+    Pxy = Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)),              # Save allocations
+    Pyy = Matrix{eltype(nav.P)}(undef, size(R)),                        # Save allocations
+    PyyK = Matrix{eltype(nav.P)}(undef, length(y), nav.ns),             # Save allocations
+)
 
     isRejected = false
 
@@ -214,9 +246,9 @@ end
         mul!(PyyK, Pyy, transpose(Ks))
         mul!(nav.KPyyK, Ks, PyyK)
         nav.P[1:nav.ns, 1:nav.ns] .-= nav.KPyyK         # Ks*Pyy*Ks'
-        mul!(nav.KPyx, Ks, transpose(Pxy[nav.ns+1:nav.nδ, :]))
-        nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= nav.KPyx
-        @inbounds for ir in nav.ns+1:nav.nδ, ic in 1:nav.ns
+        mul!(nav.KPyx, Ks, transpose(Pxy[(nav.ns+1):nav.nδ, :]))
+        nav.P[1:nav.ns, (nav.ns+1):nav.nδ] .-= nav.KPyx
+        @inbounds for ir = (nav.ns+1):nav.nδ, ic = 1:nav.ns
             nav.P[ir, ic] = nav.P[ic, ir]       # Make it symmmetric
         end
     end
@@ -237,10 +269,15 @@ end
 end
 
 # The following function can be directly used when R is a diagonal matrix
-@views function kalmanUpdateErrorScalar!(nav::NavStateEKF, y, ŷ, R, H,
-        δy = zero(y),                                                       # Save allocations
-        δz = zero(y),                                                       # Save allocations
-    )
+@views function kalmanUpdateErrorScalar!(
+    nav::NavStateEKF,
+    y,
+    ŷ,
+    R,
+    H,
+    δy = zero(y),                                                       # Save allocations
+    δz = zero(y),                                                       # Save allocations
+)
     isRejected = false
     Ks = nav.xs
     Pxy = nav.pxy
@@ -263,7 +300,7 @@ end
         # Update error state and covariance matrix
         if !isRejected
             # Error state update
-            @inbounds for j in 1:nav.ns
+            @inbounds for j = 1:nav.ns
                 Ks[j] = Pxy[j]/Pyy    # Kalman Gain
                 nav.δx[j] += Ks[j]*δy[i]
             end
@@ -275,11 +312,11 @@ end
             nav.P[1:nav.ns, 1:nav.ns] .-= nav.KPyyK  # In-place subtraction
 
             # P[1:ns, ns+1:nδ] -= Ks * Pxy[ns+1:nδ, :]'
-            mul!(nav.KPyx, Ks, transpose(Pxy[nav.ns+1:nav.nδ]))       # KPyx = Ks*Pxyᵀ
-            nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= nav.KPyx             # In-place subtraction
+            mul!(nav.KPyx, Ks, transpose(Pxy[(nav.ns+1):nav.nδ]))       # KPyx = Ks*Pxyᵀ
+            nav.P[1:nav.ns, (nav.ns+1):nav.nδ] .-= nav.KPyx             # In-place subtraction
 
             # nav.P[nav.ns+1:nav.nδ, 1:nav.ns] .= transpose(nav.P[1:nav.ns, nav.ns+1:nav.nδ])
-            @inbounds for ir in nav.ns+1:nav.nδ, ic in 1:nav.ns
+            @inbounds for ir = (nav.ns+1):nav.nδ, ic = 1:nav.ns
                 nav.P[ir, ic] = nav.P[ic, ir]       # Make it symmmetric
             end
         end
@@ -298,7 +335,7 @@ end
 
     # Measurement editing
     δy = y - ŷ
-    δz = δy./sqrt.(diag(Pyy))                   # Normalized innovation
+    δz = δy ./ sqrt.(diag(Pyy))                   # Normalized innovation
     isRejected = maximum(abs, δz) > nav.σᵣ     # σ rejection threshold
 
     # Update error state and covariance matrix
@@ -307,7 +344,7 @@ end
         xIter = copy(nav.x)
 
         # Start iterations
-        @inbounds for i in 1:iter
+        @inbounds for i = 1:iter
             if i > 1
                 ŷ, R, H = h(t, xIter)
                 mul!(Pxy, nav.P, H')
@@ -326,9 +363,9 @@ end
         # Covariance update (non-optimal gain with consider states)
         nav.P[1:nav.ns, 1:nav.ns] .-= Ks*Pyy*Ks'
         Main.dbg = nav, Ks, Pxy
-        mul!(nav.KPyx, Ks, transpose(Pxy[nav.ns+1:nav.nδ, :]))    # KPyx = Ks*Pxyᵀ
-        nav.P[1:nav.ns, nav.ns+1:nav.nδ] .-= nav.KPyx             # In-place subtraction
-        @inbounds for ir in nav.ns+1:nav.nδ, ic in 1:nav.ns
+        mul!(nav.KPyx, Ks, transpose(Pxy[(nav.ns+1):nav.nδ, :]))    # KPyx = Ks*Pxyᵀ
+        nav.P[1:nav.ns, (nav.ns+1):nav.nδ] .-= nav.KPyx             # In-place subtraction
+        @inbounds for ir = (nav.ns+1):nav.nδ, ic = 1:nav.ns
             nav.P[ir, ic] = nav.P[ic, ir]       # Make it symmmetric
         end
     end

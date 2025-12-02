@@ -26,9 +26,10 @@ function main()
     Δt = 2.0
 
     # Define Navigation Problem
-    Jf(t, x) = [zeros(3, 3) I; [zeros(1, 5) 2n; 0.0 -n^2 zeros(1, 4); 0.0 0.0 3n^2 -2n 0.0 0.0]]
+    Jf(t, x) =
+        [zeros(3, 3) I; [zeros(1, 5) 2n; 0.0 -n^2 zeros(1, 4); 0.0 0.0 3n^2 -2n 0.0 0.0]]
     #f(t, x) = Jf(t, x)*x
-    Φ = exp(Jf(0.0, zeros(6)).*Δt)
+    Φ = exp(Jf(0.0, zeros(6)) .* Δt)
     rangeLosMeas(x) = [norm(x[1:3]); atan(x[2], x[1]); asin(x[3]/norm(x[1:3]))]
     function jac(X)
         x, y, z, ~, ~, ~ = X
@@ -38,7 +39,7 @@ function main()
         r = sqrt(r2)
         return [x/r y/r z/r 0 0 0; -y/rip2 x/rip2 0 0 0 0; -c2*x*z -c2*y*z c2*rip2 0 0 0]
     end
-    h(t, x) = (rangeLosMeas(x), diagm([0.1; 0.1π/180; 0.1π/180].^2), jac(x))#ForwardDiff.jacobian(rangeLosMeas, x))  # ỹ, R, H
+    h(t, x) = (rangeLosMeas(x), diagm([0.1; 0.1π/180; 0.1π/180] .^ 2), jac(x))#ForwardDiff.jacobian(rangeLosMeas, x))  # ỹ, R, H
 
     # Define Kalman filter
     function kalmanFilter!(nav, Δt, ty, y, Q)
@@ -56,42 +57,76 @@ function main()
         ω = [0.0; -n; 0.0]
         rT = [0.0; 0.0; -Rorb]
         rC = rT + x[1:3]
-        dg = μ*(rT./Rorb^3 - rC./norm(rC)^3)
+        dg = μ*(rT ./ Rorb^3 - rC ./ norm(rC)^3)
         return [x[4:6]; -2ω × x[4:6] - ω × (ω × x[1:3]) + dg]
     end
 
     # Init plot
     set_theme!(theme_fra())
-    fig = Figure(size=(1100, 670)); display(fig)
+    fig = Figure(size = (1100, 670));
+    display(fig)
     axs = [
-        GLMakie.Axis(fig[1, 1]; xlabel="Time [s]", ylabel="x [m]", limits=(0, 200, nothing, nothing)),
-        GLMakie.Axis(fig[1, 2]; xlabel="Time [s]", ylabel="y [m]", limits=(0, 200, nothing, nothing), title="Nav performance"),
-        GLMakie.Axis(fig[1, 3]; xlabel="Time [s]", ylabel="z [m]", limits=(0, 200, nothing, nothing)),
-        GLMakie.Axis(fig[2, 1]; xlabel="Time [s]", ylabel="vx [m/s]", limits=(0, 200, nothing, nothing)),
-        GLMakie.Axis(fig[2, 2]; xlabel="Time [s]", ylabel="vy [m/s]", limits=(0, 200, nothing, nothing)),
-        GLMakie.Axis(fig[2, 3]; xlabel="Time [s]", ylabel="vz [m/s]", limits=(0, 200, nothing, nothing)),
+        GLMakie.Axis(
+            fig[1, 1];
+            xlabel = "Time [s]",
+            ylabel = "x [m]",
+            limits = (0, 200, nothing, nothing),
+        ),
+        GLMakie.Axis(
+            fig[1, 2];
+            xlabel = "Time [s]",
+            ylabel = "y [m]",
+            limits = (0, 200, nothing, nothing),
+            title = "Nav performance",
+        ),
+        GLMakie.Axis(
+            fig[1, 3];
+            xlabel = "Time [s]",
+            ylabel = "z [m]",
+            limits = (0, 200, nothing, nothing),
+        ),
+        GLMakie.Axis(
+            fig[2, 1];
+            xlabel = "Time [s]",
+            ylabel = "vx [m/s]",
+            limits = (0, 200, nothing, nothing),
+        ),
+        GLMakie.Axis(
+            fig[2, 2];
+            xlabel = "Time [s]",
+            ylabel = "vy [m/s]",
+            limits = (0, 200, nothing, nothing),
+        ),
+        GLMakie.Axis(
+            fig[2, 3];
+            xlabel = "Time [s]",
+            ylabel = "vz [m/s]",
+            limits = (0, 200, nothing, nothing),
+        ),
         #GLMakie.Axis(fig[3, 1:3]; xlabel="V-bar [m]", ylabel="R-bar [m]", xreversed=true, yreversed=true),
     ]
     function plotnav(ax, T, X, X̂, σ)
-        lines!(ax, T, X - X̂; color=:white)
-        lines!(ax, T, +3σ; linewidth=2, color=:red)
-        lines!(ax, T, -3σ; linewidth=2, color=:red)
+        lines!(ax, T, X - X̂; color = :white)
+        lines!(ax, T, +3σ; linewidth = 2, color = :red)
+        lines!(ax, T, -3σ; linewidth = 2, color = :red)
     end
 
     # Run Monte-Carlo
     x₀ = [100; 0.0; 5.0; -0.055; 0.0; -0.085]
-    P₀ = diagm([10.0; 10.0; 10.0; 0.05; 0.05; 0.05].^2)
+    P₀ = diagm([10.0; 10.0; 10.0; 0.05; 0.05; 0.05] .^ 2)
     Q = computeQd(Jf(0.0, zeros(6)), [zeros(3, 3); I], 1e-6I, Δt)
 
-    for nSim in 1:100
+    for nSim = 1:100
         @show nSim
         x̂₀ = x₀ + rand(MvNormal(P₀))
         nav = NavState(0.0, x̂₀, P₀)
         x = copy(x₀)
-        X = [x]; T = [0.0];
-        X̂ = [getState(nav)]; σ = [getStd(nav)];
+        X = [x];
+        T = [0.0];
+        X̂ = [getState(nav)];
+        σ = [getStd(nav)];
 
-        for k in 1:100
+        for k = 1:100
             # Generate measurement at t[k]
             ty = (k - 1)*Δt
             y, R, ~ = h(ty, x)
@@ -101,7 +136,7 @@ function main()
             kalmanFilter!(nav, Δt, ty, y, Q)
 
             # Propagate true dynamics from x[k] to x[k+1]
-            x = KalmanFilterEngine.odeCore(0, x, Δt, trueDyn; nSteps=5)# + rand(MvNormal(Q))
+            x = KalmanFilterEngine.odeCore(0, x, Δt, trueDyn; nSteps = 5)# + rand(MvNormal(Q))
 
             # Save data for post-processing
             push!(T, nav.t)
@@ -111,7 +146,7 @@ function main()
         end
 
         # Plotting results
-        for i in 1:6
+        for i = 1:6
             plotnav(axs[i], T, getindex.(X, i), getindex.(X̂, i), getindex.(σ, i))
         end
         #lines!(axs[7], getindex.(X, 1), getindex.(X, 3))

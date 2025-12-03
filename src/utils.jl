@@ -1,4 +1,4 @@
-function odeCore(t0, x0, Δt, f; nSteps = 1)
+function odeCore(t0, x0, Δt, f; nSteps=1)
     # 3/8 Runge-Kutta Method
     # http://www.mymathlib.com/diffeq/runge-kutta/runge_kutta_3_8.html
     t = t0
@@ -8,7 +8,7 @@ function odeCore(t0, x0, Δt, f; nSteps = 1)
     K2 = similar(x0);
     K3 = similar(x0);
     K4 = similar(x0)
-    @inbounds for _ = 1:nSteps
+    @inbounds for _ in 1:nSteps
         K1 .= h .* f(t, x)
         K2 .= h .* f(t + 1/3*h, x + K1/3)
         K3 .= h .* f(t + 2/3*h, x - K1/3 + K2)
@@ -25,7 +25,7 @@ function odeAux!(K, P, t, x, Φ, f, Jf, h)
     P .= h*Jf(t, x)*Φ
 end
 
-function odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps = 1)
+function odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
     t = t0
     x = copy(x0)
     Φ = copy(Φ0)
@@ -38,7 +38,7 @@ function odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps = 1)
     P2 = similar(Φ0);
     P3 = similar(Φ0);
     P4 = similar(Φ0)
-    @inbounds for _ = 1:nSteps
+    @inbounds for _ in 1:nSteps
         odeAux!(K1, P1, t, x, Φ, f, Jf, h)
         odeAux!(K2, P2, t + 1/3*h, x + K1/3, Φ + P1/3, f, Jf, h)
         odeAux!(K3, P3, t + 2/3*h, x - K1/3 + K2, Φ - P1/3 + P2, f, Jf, h)
@@ -93,8 +93,8 @@ function computeQd(Fx, Fw, W, Δt)
     # involving the matrix exponential, IEEE Transactions on Automatic
     # Control. 23 (3): 395–404, 1978
     G = exp([-Fx Q; zeros(n, n) Fx'] .* Δt)
-    Φ = transpose(G[(n+1):(2*n), (n+1):(2*n)])
-    Qd = Φ*G[1:n, (n+1):(2*n)]
+    Φ = transpose(G[(n + 1):(2 * n), (n + 1):(2 * n)])
+    Qd = Φ*G[1:n, (n + 1):(2 * n)]
 
     return Symmetric(Qd) #(Qd + transpose(Qd))/2
 end

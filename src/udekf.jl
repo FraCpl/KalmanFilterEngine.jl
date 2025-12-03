@@ -1,8 +1,4 @@
-mutable struct NavStateUD{
-    T<:AbstractVector{Float64},
-    M<:AbstractMatrix{Float64},
-    X<:AbstractVector{Float64},
-} <: AbstractNavState
+mutable struct NavStateUD{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64},X<:AbstractVector{Float64}} <: AbstractNavState
     t::Float64              # Time corresponding to the estimated state
     x::T                    # Full estimated state, x[t]
     U::M                    # Covariance Matrix UD, U[t]
@@ -19,7 +15,7 @@ end
 Build UDEKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateUD(t, x, P, ns = size(P, 1))
+function NavStateUD(t, x, P, ns=size(P, 1))
     U, D = UD(P)
     nδ = size(U, 1)
     return NavStateUD(t, x, U, D, zero(P[:, 1]), ns, 6, nδ)
@@ -37,25 +33,25 @@ end
 function UD!(U, D, P)
     n = size(P, 1)
     U .= 0.0
-    @inbounds for i = 1:n
+    @inbounds for i in 1:n
         U[i, i] = 1.0
     end
     D .= 0.0
     D[end] = P[end]
     if abs(P[end]) > 1e-9
-        @inbounds for i = 1:n
+        @inbounds for i in 1:n
             U[i, end] = P[i, end]/P[end]
         end
     end
-    @inbounds for j = (n-1):-1:1
+    @inbounds for j in (n - 1):-1:1
         D[j] = P[j, j]
-        for k = (j+1):n
+        for k in (j + 1):n
             D[j] -= D[k]*U[j, k]^2
         end
         if D[j] > 0.0
-            @inbounds for i = (j-1):-1:1
+            @inbounds for i in (j - 1):-1:1
                 U[i, j] = P[i, j]/D[j]
-                @inbounds for k = (j+1):n
+                @inbounds for k in (j + 1):n
                     U[i, j] -= D[k]*U[i, k]*U[j, k]/D[j]
                 end
             end
@@ -77,11 +73,11 @@ end
         n = length(D)
         Ũ = Matrix(1.0I, n, n)
         D̃ = zeros(n)
-        @inbounds for j = n:-1:2
+        @inbounds for j in n:-1:2
             D̃[j] = D[j] + c*xx[j]^2
             b = c/D̃[j]
             v = b*xx[j]
-            @inbounds for i = 1:(j-1)
+            @inbounds for i in 1:(j - 1)
                 xx[i] = xx[i] - U[i, j]*xx[j]
                 Ũ[i, j] = U[i, j] + xx[i]*v
             end
@@ -110,8 +106,8 @@ end
     f = zeros(n)
 
     f[1] = H[1]
-    @inbounds for i = 2:n
-        f[i] = (Ū[1:i, i:i]'*H[1:i])[1]   # f = Ū'*H';
+    @inbounds for i in 2:n
+        f[i] = (Ū[1:i, i:i]' * H[1:i])[1]   # f = Ū'*H';
     end
     v = D̄ .* f
     K̄[1] = v[1]
@@ -119,7 +115,7 @@ end
     D[1] = R/αOld*D̄[1]
 
     α = αOld
-    @inbounds for i = 2:n
+    @inbounds for i in 2:n
         α = αOld + v[i]*f[i]
         D[i] = αOld/α*D̄[i]
         U[:, i] = Ū[:, i] - f[i]/αOld*K̄
@@ -143,11 +139,11 @@ end
     D̃ = [D; Q]
 
     b = [Φ*U Φw]'
-    @inbounds for j = n:-1:2
+    @inbounds for j in n:-1:2
         f = D̃ .* b[:, j]
         D̄[j] = b[:, j]'*f
         f = f ./ D̄[j]
-        @inbounds for i = 1:(j-1)
+        @inbounds for i in 1:(j - 1)
             Ū[i, j] = b[:, i]'*f
             b[:, i] = b[:, i] - Ū[i, j]*b[:, j]
         end
@@ -167,13 +163,13 @@ end
     D̄ = zeros(n)
 
     b = (Φ*U)'
-    @inbounds for j = n:-1:2
+    @inbounds for j in n:-1:2
         f = D .* b[:, j]
         D̄[j] = b[:, j]'*f
         if D̄[j] > 0              # CHECK THIS IF, there was none before
             f = f ./ D̄[j]
         end
-        @inbounds for i = 1:(j-1)
+        @inbounds for i in 1:(j - 1)
             Ū[i, j] = b[:, i]'*f;
             b[:, i] = b[:, i] - Ū[i, j]*b[:, j];
         end
@@ -183,8 +179,8 @@ end
     return Ū, D̄
 end
 
-function kalmanPropagate!(nav::NavStateUD, Δt, f, Jf, Q; nSteps = 1)
-    Φ = kalmanPropagateState!(nav, Δt, f, Jf; nSteps = nSteps)
+function kalmanPropagate!(nav::NavStateUD, Δt, f, Jf, Q; nSteps=1)
+    Φ = kalmanPropagateState!(nav, Δt, f, Jf; nSteps=nSteps)
     nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, size(nav.x, 1))  # TODO: update nc: number of fully correlated states
 end
 
@@ -218,7 +214,7 @@ function UDpropagate(U, D, Φ, Q, nc)
             Ũxx, D̃xx = modGramSchmidtReduced(Φxx, Uxx, Dxx)
 
             # Add single noise components with ageeTurnerUpdate
-            @inbounds for i = 1:nc
+            @inbounds for i in 1:nc
                 if Qxx[i, i] > 0
                     x = zeros(nc);
                     x[i] = 1.0
@@ -244,24 +240,23 @@ function UDpropagate(U, D, Φ, Q, nc)
         return Ũxx, D̃xx
     end
 
-    Ũ = [Ũxx Φ[1:nc, :]*U[:, (nc+1):nδ]; zeros(np, nc) U[(nc+1):nδ, (nc+1):nδ]]    # Eq. (7.27) (7.29)
-    D̃ = [D̃xx; D[(nc+1):nδ]]                                                  # Eq. (7.28)
+    Ũ = [Ũxx Φ[1:nc, :]*U[:, (nc + 1):nδ]; zeros(np, nc) U[(nc + 1):nδ, (nc + 1):nδ]]    # Eq. (7.27) (7.29)
+    D̃ = [D̃xx; D[(nc + 1):nδ]]                                                  # Eq. (7.28)
 
     # Reference: C. L. Thornton, Triangular Covariance Factorizations for Kalman Filtering, 1976, page 61
-    Qpp = diag(Q[(nc+1):nδ, (nc+1):nδ])
-    M = diag(Φ[(nc+1):nδ, (nc+1):nδ])
+    Qpp = diag(Q[(nc + 1):nδ, (nc + 1):nδ])
+    M = diag(Φ[(nc + 1):nδ, (nc + 1):nδ])
     Ū = copy(Ũ);
     D̄ = copy(D̃)
-    @inbounds for k = 1:np
+    @inbounds for k in 1:np
         na = nc + k - 1
-        D̄[na+1] = M[k]^2*D̃[na+1] + Qpp[k]                   # d_up_b, Eq. (7.38)
-        α = M[k]*D̃[na+1]/D̄[na+1]                            # [Default]
-        Ū[1:na, na+1] = α .* Ũ[1:na, na+1]                      # U_up_ab, Eq. (7.39)
-        Ū[na+1, (na+2):nδ] = M[k] .* Ũ[na+1, (na+2):nδ]        # U_up_bc, Eq. (7.37)
+        D̄[na + 1] = M[k]^2*D̃[na + 1] + Qpp[k]                   # d_up_b, Eq. (7.38)
+        α = M[k]*D̃[na + 1]/D̄[na + 1]                            # [Default]
+        Ū[1:na, na + 1] = α .* Ũ[1:na, na + 1]                      # U_up_ab, Eq. (7.39)
+        Ū[na + 1, (na + 2):nδ] = M[k] .* Ũ[na + 1, (na + 2):nδ]        # U_up_bc, Eq. (7.37)
         if Qpp[k] > 0
             c = α*Qpp[k]/M[k]
-            Ū[1:na, 1:na], D̄[1:na] =
-                ageeTurnerUpdate(Ū[1:na, 1:na], D̄[1:na], c, Ũ[1:na, na+1])  # Eq. (7.40)
+            Ū[1:na, 1:na], D̄[1:na] = ageeTurnerUpdate(Ū[1:na, 1:na], D̄[1:na], c, Ũ[1:na, na + 1])  # Eq. (7.40)
         end
     end
 
@@ -283,7 +278,7 @@ end
     nx = length(nav.D)
     isRejected = false
 
-    @inbounds for i = 1:ny
+    @inbounds for i in 1:ny
         W1 = H[i:i, :]*nav.U
         Ph = W1*diagm(nav.D)*W1'
 
@@ -299,8 +294,7 @@ end
 
             # Perform Agee-Turner rank-one update to account for consider states
             if nx > nav.ns
-                nav.U, nav.D =
-                    ageeTurnerUpdate(nav.U, nav.D, α, [zeros(nav.ns); K[(nav.ns+1):nav.nδ]]);
+                nav.U, nav.D = ageeTurnerUpdate(nav.U, nav.D, α, [zeros(nav.ns); K[(nav.ns + 1):nav.nδ]]);
             end
 
             nav.δx[1:nav.ns] += K[1:nav.ns]*δy[i]

@@ -16,7 +16,7 @@ function main()
     # Initialize navigation state
     P₀ = generatePosDefMatrix(6)            # Initial state uncertainty covariance
     x̂₀ = x₀ + rand(MvNormal(P₀))            # Initial estimated state
-    nav = NavState(0.0, x̂₀, P₀; type = :UDEKF)
+    nav = NavState(0.0, x̂₀, P₀; type=:UDEKF)
 
     # Simulate Kalman filter
     T = [];
@@ -24,7 +24,7 @@ function main()
     X̂ = [];
     σ = []
     x = x₀
-    for k = 1:100
+    for k in 1:100
         # Generate measurement
         y = x[1:3] + rand(MvNormal(R))
 
@@ -45,15 +45,10 @@ function main()
     # Plot results for 1st coordinate
     fig = Figure();
     display(fig)
-    ax = GLMakie.Axis(
-        fig[1, 1],
-        ylabel = "Nav error",
-        xlabel = "Time [s]",
-        limits = (T[1], T[end], -1.5, 1.5),
-    )
+    ax = GLMakie.Axis(fig[1, 1]; ylabel="Nav error", xlabel="Time [s]", limits=(T[1], T[end], -1.5, 1.5))
     lines!(ax, T, getindex.(X, 1) - getindex.(X̂, 1))
-    lines!(ax, T, +3.0*getindex.(σ, 1); color = :red)
-    lines!(ax, T, -3.0*getindex.(σ, 1); color = :red)
+    lines!(ax, T, +3.0*getindex.(σ, 1); color=:red)
+    lines!(ax, T, -3.0*getindex.(σ, 1); color=:red)
 end
 
 main()

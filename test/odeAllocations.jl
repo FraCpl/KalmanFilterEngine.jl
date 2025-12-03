@@ -1,20 +1,9 @@
 using KalmanFilterEngine, BenchmarkTools, ComponentArrays
 using LinearAlgebra
 
-@views function odetest(
-    t,
-    x,
-    Δt,
-    f!;
-    K1 = similar(x),
-    K2 = similar(x),
-    K3 = similar(x),
-    K4 = similar(x),
-    tmp = similar(x),
-    nSteps = 1,
-)
+@views function odetest(t, x, Δt, f!; K1=similar(x), K2=similar(x), K3=similar(x), K4=similar(x), tmp=similar(x), nSteps=1)
     h = Δt / nSteps
-    @inbounds for _ = 1:nSteps
+    @inbounds for _ in 1:nSteps
         f!(K1, t, x)
 
         @. tmp = x + (h/3) * K1
@@ -31,9 +20,7 @@ using LinearAlgebra
     end
 end
 
-
 function main()
-
     t0 = 0
     x0 = randn(12)
     Φ0 = randn(12, 12)
@@ -44,8 +31,8 @@ function main()
     Jf(t, x) = dJ
     #@time x, P = KalmanFilterEngine.odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
 
-    X = ComponentArray(x = x0; Φ = Φ0)
-    dX = ComponentArray(x = zeros(12); Φ = zeros(12, 12))
+    X = ComponentArray(; x=x0, Φ=Φ0)
+    dX = ComponentArray(; x=zeros(12), Φ=zeros(12, 12))
 
     function ff!(dx, t, x)
         @inbounds @simd for i in eachindex(x)

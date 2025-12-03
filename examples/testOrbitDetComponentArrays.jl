@@ -22,7 +22,7 @@ Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
 h(t, x) = (x[1:3], diagm([10.0; 10.0; 10.0] .^ 2), [I zeros(3, 3)])  # ỹ, R, H
 
 # Define Kalman filter
-function kalmanFilter!(nav, Δt, ty, y, Q, iter = 0)
+function kalmanFilter!(nav, Δt, ty, y, Q, iter=0)
     if iter == 0
         kalmanUpdate!(nav, ty, y, h)                                        # Update step at t[k-1] with y[k-1]
     else
@@ -32,24 +32,25 @@ function kalmanFilter!(nav, Δt, ty, y, Q, iter = 0)
         ;
         nav.P = 0.5(nav.P + nav.P')
     end       # Sym P
-    kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps = ceil(Int, Δt/10.0))    # Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
+    kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps=ceil(Int, Δt/10.0))    # Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
 end
 
 # Run
-function main(; showplot = true)
+function main(; showplot=true)
     #Random.seed!(1234)
 
-    x̂₀ = ComponentArray(
-        pos = [6370e3+500e3; 0.0; 0.0],
-        vel = [0.0; 1.1*sqrt(3.986e14/(6370e3+500e3)); 532.2],
-    )
+    x̂₀ = ComponentArray(; pos=[6370e3+500e3; 0.0; 0.0], vel=[
+        0.0;
+        1.1*sqrt(3.986e14/(6370e3+500e3));
+        532.2
+    ])
     P₀ = x̂₀*x̂₀'
     P₀ .= diagm([1.0e2; 1.0e2; 1.0e2; 1.0e2; 1.0e2; 1.0e2] .^ 2)
 
     nav = NavState(0.0, x̂₀, P₀)
-    navUD = NavState(0.0, x̂₀, P₀; type = :UD)
-    navUKF = NavState(0.0, x̂₀, P₀; type = :UKF)
-    navSRUKF = NavState(0.0, x̂₀, P₀; type = :SRUKF)
+    navUD = NavState(0.0, x̂₀, P₀; type=:UD)
+    navUKF = NavState(0.0, x̂₀, P₀; type=:UKF)
+    navSRUKF = NavState(0.0, x̂₀, P₀; type=:SRUKF)
     navIEKF = NavState(0.0, x̂₀, P₀)
 
     Δt = 100.0
@@ -69,7 +70,7 @@ function main(; showplot = true)
     X̂iekf = [getState(navIEKF)];
     σiekf = [getStd(navIEKF)]
 
-    for k = 1:100
+    for k in 1:100
         # Generate measurement at t[k]
         ty = (k - 1)*Δt
         y, R, ~ = h(ty, x)
@@ -83,7 +84,7 @@ function main(; showplot = true)
         kalmanFilter!(navIEKF, Δt, ty, y, Q, 3)
 
         # Propagate true dynamics from x[k] to x[k+1]
-        x = KalmanFilterEngine.odeCore(0, x, Δt, f; nSteps = 1) + rand(MvNormal(Q))
+        x = KalmanFilterEngine.odeCore(0, x, Δt, f; nSteps=1) + rand(MvNormal(Q))
 
         # Save data for post-processing
         #if showplot
@@ -106,91 +107,25 @@ function main(; showplot = true)
     if showplot
         function plotnav(ax, T, X, X̂, σ; kwargs...)
             lines!(ax, T, X - X̂; kwargs...)
-            lines!(ax, T, +3σ; linewidth = 2, kwargs...)
-            lines!(ax, T, -3σ; linewidth = 2, kwargs...)
+            lines!(ax, T, +3σ; linewidth=2, kwargs...)
+            lines!(ax, T, -3σ; linewidth=2, kwargs...)
         end
         set_theme!(theme_fra())
-        fig = Figure(size = (1100, 670))
+        fig = Figure(; size=(1100, 670))
         axs = [
-            GLMakie.Axis(
-                fig[1, 1];
-                xlabel = "Time [s]",
-                ylabel = "x [m]",
-                limits = (T[1], T[end], nothing, nothing),
-            ),
-            GLMakie.Axis(
-                fig[1, 2];
-                xlabel = "Time [s]",
-                ylabel = "y [m]",
-                title = "Nav performance",
-                limits = (T[1], T[end], nothing, nothing),
-            ),
-            GLMakie.Axis(
-                fig[1, 3];
-                xlabel = "Time [s]",
-                ylabel = "z [m]",
-                limits = (T[1], T[end], nothing, nothing),
-            ),
-            GLMakie.Axis(
-                fig[2, 1];
-                xlabel = "Time [s]",
-                ylabel = "vx [m/s]",
-                limits = (T[1], T[end], nothing, nothing),
-            ),
-            GLMakie.Axis(
-                fig[2, 2];
-                xlabel = "Time [s]",
-                ylabel = "vy [m/s]",
-                limits = (T[1], T[end], nothing, nothing),
-            ),
-            GLMakie.Axis(
-                fig[2, 3];
-                xlabel = "Time [s]",
-                ylabel = "vz [m/s]",
-                limits = (T[1], T[end], nothing, nothing),
-            ),
+            GLMakie.Axis(fig[1, 1]; xlabel="Time [s]", ylabel="x [m]", limits=(T[1], T[end], nothing, nothing)),
+            GLMakie.Axis(fig[1, 2]; xlabel="Time [s]", ylabel="y [m]", title="Nav performance", limits=(T[1], T[end], nothing, nothing)),
+            GLMakie.Axis(fig[1, 3]; xlabel="Time [s]", ylabel="z [m]", limits=(T[1], T[end], nothing, nothing)),
+            GLMakie.Axis(fig[2, 1]; xlabel="Time [s]", ylabel="vx [m/s]", limits=(T[1], T[end], nothing, nothing)),
+            GLMakie.Axis(fig[2, 2]; xlabel="Time [s]", ylabel="vy [m/s]", limits=(T[1], T[end], nothing, nothing)),
+            GLMakie.Axis(fig[2, 3]; xlabel="Time [s]", ylabel="vz [m/s]", limits=(T[1], T[end], nothing, nothing)),
         ]
-        for i = 1:6
-            plotnav(
-                axs[i],
-                T,
-                getindex.(X, i),
-                getindex.(X̂, i),
-                getindex.(σ, i);
-                color = :white,
-            )
-            plotnav(
-                axs[i],
-                T,
-                getindex.(X, i),
-                getindex.(X̂ud, i),
-                getindex.(σud, i);
-                color = :red,
-            )
-            plotnav(
-                axs[i],
-                T,
-                getindex.(X, i),
-                getindex.(X̂ukf, i),
-                getindex.(σukf, i);
-                color = :green,
-            )
-            plotnav(
-                axs[i],
-                T,
-                getindex.(X, i),
-                getindex.(X̂srukf, i),
-                getindex.(σsrukf, i);
-                color = :orange,
-            )
-            plotnav(
-                axs[i],
-                T,
-                getindex.(X, i),
-                getindex.(X̂iekf, i),
-                getindex.(σiekf, i);
-                color = :magenta,
-            )
+        for i in 1:6
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂, i), getindex.(σ, i); color=:white)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ud, i), getindex.(σud, i); color=:red)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ukf, i), getindex.(σukf, i); color=:green)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂srukf, i), getindex.(σsrukf, i); color=:orange)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂iekf, i), getindex.(σiekf, i); color=:magenta)
         end
         display(fig)
     end

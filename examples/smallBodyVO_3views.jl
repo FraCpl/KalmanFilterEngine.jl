@@ -35,23 +35,16 @@ function voMeas(x, q1_IB, q2_IB, t1, t2, t3)
     r23_P = pos3_P - pos2_P
     return [q_transformVector(q1_BP, r12_P ./ ρ); q_transformVector(q2_BP, r23_P ./ ρ)]
 end
-h(x, q1_IB, q2_IB, t1, t2, t3) = (
-    voMeas(x, q1_IB, q2_IB, t1, t2, t3),
-    Matrix((0.01^2)*I, 6, 6),
-    ForwardDiff.jacobian(x -> voMeas(x, q1_IB, q2_IB, t1, t2, t3), x),
-)  # ỹ, R, H
+function h(x, q1_IB, q2_IB, t1, t2, t3)
+    (voMeas(x, q1_IB, q2_IB, t1, t2, t3), Matrix((0.01^2)*I, 6, 6), ForwardDiff.jacobian(x -> voMeas(x, q1_IB, q2_IB, t1, t2, t3), x))  # ỹ, R, H
+end  # ỹ, R, H
 
 # Define Kalman filter
 function kalmanFilter!(nav, Δt, ty, y, Q, q1_IB, q2_IB, latch)
 
     # Update step at t[k-1]
     if latch == 3
-        kalmanUpdate!(
-            nav,
-            ty,
-            y,
-            (t, x) -> h(x, q1_IB, q2_IB, nav.t - 2Δt, nav.t - Δt, nav.t),
-        )
+        kalmanUpdate!(nav, ty, y, (t, x) -> h(x, q1_IB, q2_IB, nav.t - 2Δt, nav.t - Δt, nav.t))
     end
 
     if hasfield(typeof(nav), :P)
@@ -73,7 +66,7 @@ function kalmanFilter!(nav, Δt, ty, y, Q, q1_IB, q2_IB, latch)
     end
 
     # Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
-    kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps = ceil(Int, Δt/10.0))
+    kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps=ceil(Int, Δt/10.0))
 end
 
 # Spacecraft attitude pointing
@@ -94,14 +87,7 @@ function main()
 
     # Initial State
     #x₀ = getState(KepOrbit(μ = μ, a = 2e3, e = 1.5, θ = -115.0*π/180))
-    x₀ = [
-        -905.966704421432,
-        -3049.30785605947,
-        1090.04517280359,
-        0.0370191439000898,
-        0.00971259046629204,
-        -0.0120961513397154,
-    ] # Polimi
+    x₀ = [-905.966704421432, -3049.30785605947, 1090.04517280359, 0.0370191439000898, 0.00971259046629204, -0.0120961513397154] # Polimi
 
     # Initialize navigation
     #Q = computeQd([zeros(3,3) I zeros(3,3); zeros(6,9)], [zeros(3,3); I; zeros(3,3)], 1e-7I, Δt)
@@ -121,21 +107,13 @@ function main()
 
     latch = 1
 
-    for k = 1:lastindex(t)
+    for k in 1:lastindex(t)
 
         # Generate measurement at t[k]
         if latch == 3
             qOldOld_IB = spacecraftAttitude(x[13:18])
             qOld_IB = spacecraftAttitude(x[7:12])
-            y =
-                voMeas(
-                    [x[1:9]; x[13:15]],
-                    qOldOld_IB,
-                    qOld_IB,
-                    t[k] - 2Δt,
-                    t[k] - Δt,
-                    t[k],
-                ) + rand(MvNormal(R))
+            y = voMeas([x[1:9]; x[13:15]], qOldOld_IB, qOld_IB, t[k] - 2Δt, t[k] - Δt, t[k]) + rand(MvNormal(R))
         else
             qOldOld_IB = zeros(4)
             qOld_IB = zeros(4)
@@ -164,50 +142,24 @@ function main()
     end
 
     function plotnav(i, T, X, X̂, σ, linestyle)
-        Plots.plot!(
-            T,
-            X - X̂;
-            ticks = :native,
-            lab = "",
-            linestyle = linestyle,
-            subplot = i,
-        )
-        Plots.plot!(T, +3σ; color = :red, lab = "", linestyle = linestyle, subplot = i)
-        Plots.plot!(T, -3σ; color = :red, lab = "", linestyle = linestyle, subplot = i)
+        Plots.plot!(T, X - X̂; ticks=:native, lab="", linestyle=linestyle, subplot=i)
+        Plots.plot!(T, +3σ; color=:red, lab="", linestyle=linestyle, subplot=i)
+        Plots.plot!(T, -3σ; color=:red, lab="", linestyle=linestyle, subplot=i)
     end
 
-    pp = Plots.plot(layout = (2, 3))
+    pp = Plots.plot(; layout=(2, 3))
     lbl = ["x [m]"; "y [m]"; "z [m]"; "vx [m/s]"; "vy [m/s]"; "vz [m/s]"]
-    for i = 1:6
-        plotnav(
-            i,
-            T/3600.0/24.0,
-            getindex.(X, i),
-            getindex.(X̂, i),
-            getindex.(σ, i),
-            :solid,
-        )
-        Plots.plot!(
-            subplot = i,
-            margin = 5*Plots.mm,
-            xlim = (T[1]/3600.0/24.0, T[end]/3600.0/24.0),
-        )
-        Plots.xlabel!(subplot = i, "Time [days]");
-        Plots.ylabel!(subplot = i, lbl[i])
+    for i in 1:6
+        plotnav(i, T/3600.0/24.0, getindex.(X, i), getindex.(X̂, i), getindex.(σ, i), :solid)
+        Plots.plot!(; subplot=i, margin=5*Plots.mm, xlim=(T[1]/3600.0/24.0, T[end]/3600.0/24.0))
+        Plots.xlabel!(; subplot=i, "Time [days]");
+        Plots.ylabel!(; subplot=i, lbl[i])
         if i == 2
             ;
-            Plots.title!(subplot = i, "Nav performance");
+            Plots.title!(; subplot=i, "Nav performance");
         end
     end
-    display(
-        Plots.plot(
-            pp,
-            size = (1100, 670),
-            bg = RGB(40/255, 44/255, 52/255),
-            fg = RGB(0.7, 0.7, 0.7),
-            right_margin = 10*Plots.mm,
-        ),
-    )
+    display(Plots.plot(pp; size=(1100, 670), bg=RGB(40/255, 44/255, 52/255), fg=RGB(0.7, 0.7, 0.7), right_margin=10*Plots.mm))
 
     # display(plot(t/3600.0/24.0,norm.(X); ticks = :native))
 end

@@ -41,7 +41,7 @@ function TEST_carlsonUpdate()
     K, U, D, α = KalmanFilterEngine.carlsonUpdate(Ū, D̄, H[:], R)
 
     ε1 = maximum(abs.(U*diagm(D)*U' - (P - K*H*P)))
-    ε2 = α - ((H*P*H')[1] + R)
+    ε2 = α - ((H * P * H')[1] + R)
     return maximum([ε1; ε2])
 end
 
@@ -64,7 +64,6 @@ function TEST_modGramSchmidt()
 end
 
 function TEST_kalmanOde()
-
     μ = 3.986e14
     x0 = [6380e3+500e3; 0.0; 1.5e2; 0.0; sqrt(μ/(6380e3+500e3))*1.03; 0.0]
 
@@ -75,13 +74,7 @@ function TEST_kalmanOde()
     Torb = 2π*sqrt(sma^3/μ)
 
     f(x, μ) = [x[4:6]; -μ/norm(x[1:3])^3*x[1:3]]
-    x = KalmanFilterEngine.odeCore(
-        0.0,
-        x0,
-        Torb,
-        (t, x) -> f(x, μ);
-        nSteps = ceil(Int, Torb/1.0),
-    )
+    x = KalmanFilterEngine.odeCore(0.0, x0, Torb, (t, x) -> f(x, μ); nSteps=ceil(Int, Torb/1.0))
 
     return norm(x[1:3] - x0[1:3]) < 100.0
 end
@@ -107,7 +100,7 @@ function TEST_kalmanOdeSTM()
     x0 = [randn(3); randn(3)]
     Φ0 = Matrix(1.0I, 6, 6)
     Δt = 3.760
-    @time x, Φ = KalmanFilterEngine.odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps = 1)
+    @time x, Φ = KalmanFilterEngine.odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
     xTrue = [x0[1:3] + x0[4:6]*Δt; x0[4:6]]
     ΦTrue = I + [zeros(3, 3) Δt*I; zeros(3, 6)]
 
@@ -218,11 +211,11 @@ function TEST_simpleKalman(type::Symbol)
     Q = computeQd(Jf(0.0, zeros(6)), [zeros(3, 3); I], 0.005616*Matrix(I, 3, 3), Δt)
     dummy, R, H = h(0, zeros(6))
 
-    nav = NavState(0.0, x̂₀, P₀; type = type)
+    nav = NavState(0.0, x̂₀, P₀; type=type)
 
     function klm!(nav, y)
         kalmanUpdate!(nav, 0.0, y, h)
-        kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps = 10)
+        kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps=10)
     end
 
     function klmSimple(x̂, P, y)
@@ -241,7 +234,7 @@ function TEST_simpleKalman(type::Symbol)
     x = copy(x₀)
     x̂ = copy(x̂₀)
     P = copy(P₀)
-    for _ = 1:100
+    for _ in 1:100
         y = H*x + rand(MvNormal(R))     # Generate measurement
         klm!(nav, y)                    # Execute Kalman step
         x̂, P = klmSimple(x̂, P, y)       # Execute Kalman step (simple)
@@ -251,7 +244,6 @@ function TEST_simpleKalman(type::Symbol)
 
     return ε
 end
-
 
 @testset "KalmanFilterEngine.jl" begin
     ERR_TOL = 1e-9

@@ -28,11 +28,9 @@ function voMeas(x, q1_IB, t1, t2)
     q1_BP = q_multiply(q_transpose(q1_IB), q1_IP)
     return q_transformVector(q1_BP, normalize(pos2_P - pos1_P))
 end
-h(x, q1_IB, t1, t2) = (
-    voMeas(x, q1_IB, t1, t2),
-    Matrix((0.01^2)*I, 3, 3),
-    ForwardDiff.jacobian(x -> voMeas(x, q1_IB, t1, t2), x),
-)  # ỹ, R, H
+function h(x, q1_IB, t1, t2)
+    (voMeas(x, q1_IB, t1, t2), Matrix((0.01^2)*I, 3, 3), ForwardDiff.jacobian(x -> voMeas(x, q1_IB, t1, t2), x))  # ỹ, R, H
+end  # ỹ, R, H
 
 # Define Kalman filter
 function kalmanFilter!(nav, Δt, ty, y, Q, q1_IB)
@@ -52,7 +50,7 @@ function kalmanFilter!(nav, Δt, ty, y, Q, q1_IB)
     nav.P = H*nav.P*transpose(H)
 
     # Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
-    kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps = ceil(Int, Δt/10.0))
+    kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps=ceil(Int, Δt/10.0))
 end
 
 # Spacecraft attitude pointing
@@ -73,14 +71,7 @@ function main()
 
     # Initial State
     #x₀ = getOrbitState(KepOrbit(μ=μ, a=2e3, e=1.5, θ=-115.0*π/180))
-    x₀ = [
-        -905.966704421432,
-        -3049.30785605947,
-        1090.04517280359,
-        0.0370191439000898,
-        0.00971259046629204,
-        -0.0120961513397154,
-    ] # Polimi
+    x₀ = [-905.966704421432, -3049.30785605947, 1090.04517280359, 0.0370191439000898, 0.00971259046629204, -0.0120961513397154] # Polimi
 
     # Initialize navigation
     #Q = computeQd([zeros(3,3) I zeros(3,3); zeros(6,9)], [zeros(3,3); I; zeros(3,3)], 1e-7I, Δt)
@@ -88,7 +79,7 @@ function main()
     P₀ = diagm([100*ones(3); 1e-4*ones(3); 1e-6*ones(3)] .^ 2)
     x̂₀ = [x₀; 0.0; 0.0; 0.0] + rand(MvNormal(P₀));
     x̂₀[7:9] .= 0.0
-    nav = NavState(0.0, x̂₀, P₀; type = :ESKF)
+    nav = NavState(0.0, x̂₀, P₀; type=:ESKF)
 
     # Run navigation
     x = [x₀; x₀]
@@ -98,7 +89,7 @@ function main()
     σ = [getStd(nav)];
     dummy, R, ~ = h(zeros(9), zeros(4), 0.0, 0.0)
 
-    for k = 1:lastindex(t)
+    for k in 1:lastindex(t)
 
         # Generate measurement at t[k]
         qOld_IB = spacecraftAttitude(x[7:12])
@@ -121,50 +112,24 @@ function main()
     end
 
     function plotnav(i, T, X, X̂, σ, linestyle)
-        Plots.plot!(
-            T,
-            X - X̂;
-            ticks = :native,
-            lab = "",
-            linestyle = linestyle,
-            subplot = i,
-        )
-        Plots.plot!(T, +3σ; color = :red, lab = "", linestyle = linestyle, subplot = i)
-        Plots.plot!(T, -3σ; color = :red, lab = "", linestyle = linestyle, subplot = i)
+        Plots.plot!(T, X - X̂; ticks=:native, lab="", linestyle=linestyle, subplot=i)
+        Plots.plot!(T, +3σ; color=:red, lab="", linestyle=linestyle, subplot=i)
+        Plots.plot!(T, -3σ; color=:red, lab="", linestyle=linestyle, subplot=i)
     end
 
-    pp = Plots.plot(layout = (2, 3))
+    pp = Plots.plot(; layout=(2, 3))
     lbl = ["x [m]"; "y [m]"; "z [m]"; "vx [m/s]"; "vy [m/s]"; "vz [m/s]"]
-    for i = 1:6
-        plotnav(
-            i,
-            T/3600.0/24.0,
-            getindex.(X, i),
-            getindex.(X̂, i),
-            getindex.(σ, i),
-            :solid,
-        )
-        Plots.plot!(
-            subplot = i,
-            margin = 5*Plots.mm,
-            xlim = (T[1]/3600.0/24.0, T[end]/3600.0/24.0),
-        )
-        Plots.xlabel!(subplot = i, "Time [days]");
-        Plots.ylabel!(subplot = i, lbl[i])
+    for i in 1:6
+        plotnav(i, T/3600.0/24.0, getindex.(X, i), getindex.(X̂, i), getindex.(σ, i), :solid)
+        Plots.plot!(; subplot=i, margin=5*Plots.mm, xlim=(T[1]/3600.0/24.0, T[end]/3600.0/24.0))
+        Plots.xlabel!(; subplot=i, "Time [days]");
+        Plots.ylabel!(; subplot=i, lbl[i])
         if i == 2
             ;
-            Plots.title!(subplot = i, "Nav performance");
+            Plots.title!(; subplot=i, "Nav performance");
         end
     end
-    display(
-        Plots.plot(
-            pp,
-            size = (1100, 670),
-            bg = RGB(40/255, 44/255, 52/255),
-            fg = RGB(0.7, 0.7, 0.7),
-            right_margin = 10*Plots.mm,
-        ),
-    )
+    display(Plots.plot(pp; size=(1100, 670), bg=RGB(40/255, 44/255, 52/255), fg=RGB(0.7, 0.7, 0.7), right_margin=10*Plots.mm))
 
     # display(plot(t/3600.0/24.0,norm.(X); ticks = :native))
     @show x[1:6]

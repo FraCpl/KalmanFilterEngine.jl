@@ -19,6 +19,6 @@ function main()
     y = H*x₀ + rand(MvNormal(R))     # Generate measurement
 
     @btime kalmanUpdate!($nav, 0.0, $y, $h)
-    @btime kalmanPropagate!($nav, $Δt, $f, $Jf, $Q; nSteps = 1)
+    @btime kalmanPropagate!($nav, $Δt, $f, $Jf, $Q; nSteps=1)
 end
 main()

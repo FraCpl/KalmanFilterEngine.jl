@@ -17,30 +17,30 @@ end
 Build SRUKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
-function NavStateSRUKF(t, x, P, ns = size(P, 1); α = 1e-3, β = 2.0, κ = 0.0)
+function NavStateSRUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
     S = cholesky(P).U.data
     L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
 
-    return NavStateSRUKF(t, x, S, ns, 6, γ, Wm, Wc, L, [zero(x) for _ = 1:(2L+1)])
+    return NavStateSRUKF(t, x, S, ns, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)])
 end
 
 getCov(nav::NavStateSRUKF) = nav.S'*nav.S
 
 @views function computeSigmaPoints!(nav::NavStateSRUKF)
     nav.X[1] .= nav.x
-    @inbounds for i = 1:nav.L, j = 1:nav.L
-        nav.X[i+1][j] = nav.x[j] + nav.γ*nav.S[i, j]
-        nav.X[i+1+nav.L][j] = nav.x[j] - nav.γ*nav.S[i, j]
+    @inbounds for i in 1:nav.L, j in 1:nav.L
+        nav.X[i + 1][j] = nav.x[j] + nav.γ*nav.S[i, j]
+        nav.X[i + 1 + nav.L][j] = nav.x[j] - nav.γ*nav.S[i, j]
     end
 end
 
-@views function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Jf, Q; nSteps = 1)
+@views function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Jf, Q; nSteps=1)
     # Create sigma points
     computeSigmaPoints!(nav)
 
     # Propagate sigma points
-    nav.X = odeCore.(nav.t, nav.X, Δt, f; nSteps = nSteps)
+    nav.X = odeCore.(nav.t, nav.X, Δt, f; nSteps=nSteps)
     nav.t = nav.t + Δt
 
     # Compute mean state
@@ -49,8 +49,8 @@ end
     # Calculate covariance estimate
     M = zeros(nav.L, 2*nav.L)
     wc = sqrt(nav.Wc[2])
-    @inbounds for i = 1:(2*nav.L)
-        M[:, i] .= wc*(nav.X[i+1] - nav.x)
+    @inbounds for i in 1:(2 * nav.L)
+        M[:, i] .= wc*(nav.X[i + 1] - nav.x)
     end
     nav.S .= qr([M sqrt(Q)]').R
 
@@ -58,8 +58,8 @@ end
     cholupdate!(nav.S, δX1, sign(nav.Wc[1]))
 end
 
-function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Q; nSteps = 1)
-    kalmanPropagate!(nav, Δt, f, nothing, Q; nSteps = nSteps)
+function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Q; nSteps=1)
+    kalmanPropagate!(nav, Δt, f, nothing, Q; nSteps=nSteps)
 end
 
 @views function kalmanUpdate!(nav::NavStateSRUKF, t, y, h)
@@ -76,15 +76,15 @@ end
     # Compute sigma statistics
     M = zeros(ny, 2nav.L)
     wc = sqrt(nav.Wc[2])
-    @inbounds for i = 1:(2*nav.L)
-        M[:, i] = wc*(Ŷ[i+1] - ŷ)
+    @inbounds for i in 1:(2 * nav.L)
+        M[:, i] = wc*(Ŷ[i + 1] - ŷ)
     end
     Syy = qr([M sqrtR]').R
     δY1 = sqrt(abs(nav.Wc[1]))*(Ŷ[1] - ŷ)
     cholupdate!(Syy, δY1, sign(nav.Wc[1]))
 
     Pxy = zeros(nav.L, ny)
-    @inbounds for i = 1:(2*nav.L+1)
+    @inbounds for i in 1:(2 * nav.L + 1)
         Pxy .+= nav.Wc[i] .* (nav.X[i] - nav.x)*(Ŷ[i] - ŷ)'
     end
 
@@ -97,11 +97,11 @@ end
     if !isRejected
         # Error state update
         K = (Pxy/Syy)/Syy'                  # Kalman Gain
-        K[(nav.ns+1):nav.L, :] .= 0.0            # Consider states
+        K[(nav.ns + 1):nav.L, :] .= 0.0            # Consider states
         nav.x[1:nav.ns] .+= K[1:nav.ns, :]*δy
 
         U = K*Syy'
-        @inbounds for i = 1:ny
+        @inbounds for i in 1:ny
             cholupdate!(nav.S, U[:, i], -1.0)
         end
     end
@@ -112,15 +112,15 @@ end
 # https://math.stackexchange.com/questions/4318420/how-does-cholupdate-work
 # https://en.wikipedia.org/wiki/Cholesky_decomposition
 # Caution: This modifies both S and x!
-@views function cholupdate!(S, x, signx = 1.0)
+@views function cholupdate!(S, x, signx=1.0)
     n = length(x)
-    @inbounds for k = 1:n
+    @inbounds for k in 1:n
         r = sqrt(S[k, k]^2 + signx*x[k]*x[k])
         c = r/S[k, k]
         s = x[k]/S[k, k]
         S[k, k] = r
         if k < n
-            @inbounds for j = (k+1):n
+            @inbounds for j in (k + 1):n
                 S[k, j] = (S[k, j] + signx*s*x[j])/c
                 x[j] = c*x[j] - s*S[k, j]
             end

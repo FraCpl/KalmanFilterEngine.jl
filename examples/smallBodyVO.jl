@@ -1,6 +1,6 @@
 using LinearAlgebra
 using KalmanFilterEngine
-using Quaternions
+using Quats
 using DifferentialEquations
 using Distributions
 using ForwardDiff

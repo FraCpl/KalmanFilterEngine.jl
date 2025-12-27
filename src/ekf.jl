@@ -163,7 +163,7 @@ to EKF and UDEKF.
     ŷ, R, H = h(t, nav.x)
 
     # Allocate innovation and normalized innovation
-    δy = zero(y);
+    δy = zero(y)
     δz = zero(y)
 
     # Perform kalman update
@@ -265,7 +265,7 @@ end
         mul!(Pxy, nav.P, H[i, :])
         Pyy = dot(H[i, :], Pxy) + R[i, i]
 
-        if Pyy < 0.0
+        if Pyy < 0
             isRejected = true
             break
         end

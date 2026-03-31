@@ -1,14 +1,14 @@
 mutable struct NavStateUKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}} <: AbstractNavState
-    t::Float64              # Time corresponding to the estimated state
-    x::T                    # Full estimated state, x[t]
-    P::M                    # Covariance matrix P[t]
-    ns::Int64               # Number of solve for states
-    σᵣ::Int64               # Outlier rejection threshold
-    γ::Float64              # UKF parameters
-    Wm::Vector{Float64}     # UKF parameters
-    Wc::Vector{Float64}     # UKF parameters
-    L::Int64                # Length of state vector
-    X::Vector{T}            # Sigma point states
+    t::Float64                  # Time corresponding to the estimated state
+    x::T                        # Full estimated state, x[t]
+    P::M                        # Covariance matrix P[t]
+    const ns::Int64             # Number of solve for states
+    const σᵣ::Int64             # Outlier rejection threshold
+    const γ::Float64            # UKF parameters
+    const Wm::Vector{Float64}   # UKF parameters
+    const Wc::Vector{Float64}   # UKF parameters
+    const L::Int64              # Length of state vector
+    X::Vector{T}                # Sigma point states
 end
 
 """

@@ -4,9 +4,9 @@ mutable struct NavStateUD{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64},
     U::M                    # Covariance Matrix UD, U[t]
     D::X                    # Covariance Matrix UD, D[t]
     δx::X                   # Error state, δx[t]
-    ns::Int64               # Number of solve for (error) states
-    σᵣ::Int64               # Outlier rejection threshold
-    nδ::Int64               # Number of error states
+    const ns::Int64         # Number of solve for (error) states
+    const σᵣ::Int64         # Outlier rejection threshold
+    const nδ::Int64         # Number of error states
 end
 
 """

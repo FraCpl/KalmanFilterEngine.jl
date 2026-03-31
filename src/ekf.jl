@@ -3,9 +3,9 @@ mutable struct NavStateEKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}
     x::T                    # Full estimated state, x[t]
     P::M                    # Covariance Matrix, P[t]
     δx::D                   # Error state, δx[t]
-    ns::Int64               # Number of solve for (error) states
-    σᵣ::Int64               # Outlier rejection threshold
-    nδ::Int64               # Number of error states
+    const ns::Int64         # Number of solve for (error) states
+    const σᵣ::Int64         # Outlier rejection threshold
+    const nδ::Int64         # Number of error states
 
     # Internal allocation variables
     KPyyK::Matrix{Float64}

@@ -340,7 +340,6 @@ end
 
         # Covariance update (non-optimal gain with consider states)
         nav.P[1:nav.ns, 1:nav.ns] .-= Ks*Pyy*Ks'
-        Main.dbg = nav, Ks, Pxy
         mul!(nav.KPyx, Ks, transpose(Pxy[(nav.ns + 1):nav.nδ, :]))    # KPyx = Ks*Pxyᵀ
         nav.P[1:nav.ns, (nav.ns + 1):nav.nδ] .-= nav.KPyx             # In-place subtraction
         @inbounds for ir in (nav.ns + 1):nav.nδ, ic in 1:nav.ns

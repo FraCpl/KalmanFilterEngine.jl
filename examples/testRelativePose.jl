@@ -6,23 +6,35 @@ using LinearAlgebra
 using GLMakie
 using Random
 using JTools
+using Quats
 
-# This is a quite interesting and challenging problem with nonlinear measurements and
-# discrepancy between filter propagation model (linear RDV CW equations) and true dynamics
-# (nonlinear relative dynamics in LVLH). EKF, ESKF, and UKF fail to ensure consistency,
-# while IEKF works really well (even for very low number of iterations).
-#
-# Problem Reference:
-# [1] Michaelson, Popov, Zanetti, RECURSIVE UPDATE FILTERING: A NEW APPROACH
-
+@warn "Work in progress"
 function main()
+
     #Random.seed!(1234)
 
     # Kalman functions
     n = 0.001131
     μ = 3.986e14
-    Rorb = (μ/n^2)^(1/3)
+    rT = (μ / n^2)^(1/3)
     Δt = 2.0
+
+    JT_T = 1.0I(3)
+    posTQ_Q = randn(3)
+    posQF_Q = [randn(3) for _ in 1:10]
+    target = (
+        n=n,                    # [rad/s] Orbital rate
+        rT=(μ/n^2)^(1/3),       # [m] Orbital radius
+        JT_T=JT_T,              # [kg m²] Inertia matrix
+        invJT_T = inv(JT_T),    # [kg⁻¹ m⁻²] Inverse inertia matrix
+        posTQ_Q=posTQ_Q,        # [m] Position of Q wrt CoM T
+        posQF_Q=posQF_Q         # [m] Position of features F in Q
+        )
+
+    chaser = (
+        R_SC=1.0I(3),           # Sensor accommodation
+        posCS_C=zeros(3),       # Sensor accommodation
+    )
 
     # Define Navigation Problem
     Jf = [zeros(3, 3) I; zeros(3, 6)]
@@ -33,17 +45,30 @@ function main()
     Φ = exp(Jf .* Δt)
 
     R = diagm([0.1; 0.1π/180; 0.1π/180] .^ 2)
-    yOut = zeros(3)
-    H = zeros(3, 6)
-    function rangeLosMeas(X)
-        x, y, z, _, _, _ = X
+    yOut = zeros(2)
+    H = zeros(3, 12)
+
+    # xEst = [posTC_L; velTC_L; q_IT; ωIT_T; posTQ_Q; JT_T]
+    function featMeas(X, posQF_Q, R_CI, R_IL)
+        posTC_L = X[1:3]
+        q_IT = X[7:10]
+        posTQ_Q = X[14:16]
+
+        R_IT = q_toDcm(q_IT)
+        R_SC = chaser.R_SC
+        posCS_C = chaser.posCS_C
+
+        posSF_S = R_SC*(R_CI * R_IT * (posTQ_Q - posQF_Q) - posCS_C - R_CI * R_IL * posTC_L)
+        y = [posSF_S[1]/posSF_S[3]; posSF_S[2]/posSF_S[3]]
+
+# TODO: to be updated
         yOut[1] = sqrt(x * x + y * y + z * z)
         yOut[2] = atan(y, x)
         yOut[3] = asin(z / yOut[1])
         return yOut
     end
 
-    function jac(X)
+    function jacMeas(X)
         x, y, z, ~, ~, ~ = X
         rip2 = x * x + y * y
         r2 = rip2 + z * z
@@ -60,7 +85,7 @@ function main()
         return H
     end
 
-    h(t, x) = (rangeLosMeas(x), R, jac(x))#ForwardDiff.jacobian(rangeLosMeas, x))  # ỹ, R, H
+    h(t, x) = (featMeas(x), R, jacMeas(x))#ForwardDiff.jacobian(rangeLosMeas, x))  # ỹ, R, H
 
     # Define Kalman filter
     xTmp = zeros(6)
@@ -76,20 +101,28 @@ function main()
         kalmanPropagateCov!(nav, Φ, Q)
     end
 
-    dx = zeros(6)
-    function trueDyn(t, x)
-        x, y, z, vx, vy, vz = x
-        xC = x; yC = y; zC = z - Rorb
+    dx = zeros(13)
+    function trueDyn(t, X)      # OK
+        # Translational non-linear relative dynamics
+        n = target.n
+        x, y, z = X[1:3]        # posTC_L
+        vx, vy, vz = X[4:6]        # velTC_L
+
+        xC = x; yC = y; zC = z - target.rT
         rC = sqrt(xC * xC + yC * yC + zC * zC)
         irC3 = 1 / rC^3
 
-        dgx = -μ * xC * irC3
-        dgy = -μ * yC * irC3
-        dgz = -μ *(1 / Rorb^2 + zC * irC3)
         dx[1] = vx; dx[2] = vy; dx[3] = vz
-        dx[4] = 2*n*vz + (n^2)*x + dgx
-        dx[5] = dgy
-        dx[6] = -2*n*vx + (n^2)*z + dgz
+        dx[4] = 2*n*vz + (n^2)*x - μ * xC * irC3
+        dx[5] = -μ * yC * irC3
+        dx[6] = -2*n*vx + (n^2)*z - μ *(1 / target.rT^2 + zC * irC3)
+
+        # Target absolute rotational dynamics
+        q_IT = X[7:10]
+        ωIT_T = X[11:13]
+
+        q_derivative!(dx[7:10], q_IT, ωIT_T)
+        dx[11:13] = target.invJT_T * (ωIT_T × (target.JT_T * ωIT_T))
         return dx
     end
 

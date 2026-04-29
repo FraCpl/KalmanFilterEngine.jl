@@ -59,11 +59,6 @@ function multJ!(mJ, X)
     return mJ
 end
 
-function multJ(X)
-    mJ = zeros(3, 6)
-    return multJ!(mJ, X)
-end
-
 function invJ!(iJ, J)
     jxx, jxy, jxz, _, jyy, jyz, _, _, jzz = J
     detj = 1 / (jxx*(jyy*jzz - (jyz^2)) - jxy*(jxy*jzz - jxz*jyz) + (jxy*jyz - jxz*jyy)*jxz)
@@ -89,7 +84,7 @@ function updateQuat(q, δθ, qTmp)
 end
 
 function updateNavState!(navData::NavData, x, δx)
-    if any(!iszero, δx)
+    if !all(iszero, δx)
         qTmp = navData.qTmp
         for ix in 1:6
             x[ix] += δx[ix]
@@ -114,11 +109,16 @@ function navDyn(navData::NavData, X)
     rT = navData.rT
 
     # Extract states from state vector
-    x, y, z = X[1:3]            # posTC_L
-    vx, vy, vz = X[4:6]         # velTC_L
+    x, y, z = X[1], X[2], X[3]    # posTC_L
+    vx, vy, vz = X[4], X[5], X[6]        # velTC_L
     q_IT = X[7:10]
     ωIT_T = X[11:13]
-    JT_T[1, 1], JT_T[1, 2], JT_T[1, 3], JT_T[2, 2], JT_T[2, 3], JT_T[3, 3] = X[14:19]
+    JT_T[1, 1] = X[14]
+    JT_T[1, 2] = X[15]
+    JT_T[1, 3] = X[16]
+    JT_T[2, 2] = X[17]
+    JT_T[2, 3] = X[18]
+    JT_T[3, 3] = X[19]
     JT_T[2, 1] = JT_T[1, 2]
     JT_T[3, 1] = JT_T[1, 3]
     JT_T[3, 2] = JT_T[2, 3]
@@ -174,13 +174,17 @@ function navDynJacobian(navData, X)
     J[7:9, 7:9] = -WIT_T
     J[7, 10] = 1.0; J[8, 11] = 1.0; J[9, 12] = 1.0
 
-    JT_T[1, 1], JT_T[1, 2], JT_T[1, 3], JT_T[2, 2], JT_T[2, 3], JT_T[3, 3] = X[14:19]
+    JT_T[1, 1] = X[14]
+    JT_T[1, 2] = X[15]
+    JT_T[1, 3] = X[16]
+    JT_T[2, 2] = X[17]
+    JT_T[2, 3] = X[18]
+    JT_T[3, 3] = X[19]
     JT_T[2, 1] = JT_T[1, 2]
     JT_T[3, 1] = JT_T[1, 3]
     JT_T[3, 2] = JT_T[2, 3]
 
-    if any(!iszero, JT_T)
-        #
+    if !all(iszero, JT_T)
         tmp1 = navData.tmp1; tmp2 = navData.tmp2; αIT_T = navData.tmp3
         tmp5 = navData.tmp5; tmp6 = navData.tmp6; tmp7 = navData.tmp7
         tmp4 = navData.tmp4
@@ -212,7 +216,7 @@ function navDynJacobian(navData, X)
     return J
 end
 
-navProcessNoise(navData, x=zeros(22)) = computeQd(navDynJacobian(navData, x), navData.Fw, 1.0I(6), navData.Δt)
+navProcessNoise(navData, x=zeros(22)) = computeQd(navDynJacobian(navData, x), navData.Fw, I, navData.Δt)
 
 function losMeas(navData::NavData, X, posQF_Q, R_CI, R_IL, R_SC, posCS_C)
     posSF_S, _, Hpos = posMeas(navData, X, posQF_Q, R_CI, R_IL, R_SC, posCS_C)
@@ -254,11 +258,15 @@ function posMeas(navData::NavData, X, posQF_Q, R_CI, R_IL, R_SC, posCS_C)
     end
 
     # Compute jacobian
-    ly = length(y)
-    H = zeros(ly, 21)
-    H[:, 1:3] = -R_SL
-    H[:, 7:9] = -R_ST * crossMat(posTF_Q)
-    H[:, 19:21] = R_ST
+    xTF_Q = navData.tmp4
+    H = navData.Hpos
+    crossMat!(xTF_Q, posTF_Q)
+    mul!(navData.tmp5, R_ST, xTF_Q)
+    @inbounds for j in 1:3, i in 1:3
+        H[i, j] = -R_SL[i, j]
+        H[i, j+6] = -navData.tmp5[i, j]
+        H[i, i+18] = R_ST[i, j]
+    end
 
     return y, navData.Rpos, H
 end

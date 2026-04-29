@@ -31,9 +31,9 @@ function main(Nsim=1)
 
     P₀ = diagm([4.5/3*ones(3); 0.03/3*ones(3); 17.19/3*π/180*ones(3); 3.44/3*π/180*ones(3); 20*ones(6); 0.15/3*ones(3)].^2)
     R = measFun(navData, zeros(22), zeros(3), zeros(3, 3), zeros(3, 3), zeros(3, 3), zeros(3))[2]
-    Q = navProcessNoise(navData, zeros(22))
+    Q = navProcessNoise(navData)
     Rdist = MvNormal(R)
-    P0dist = MvNormal(P₀)
+    P₀dist = MvNormal(P₀)
 
     fDyn(t, x) = navDyn(trueData, x)
 
@@ -48,7 +48,7 @@ function main(Nsim=1)
         posTQ_Q = randn(3)
         x₀ = [x0_L; q0_IT; ω0IT_T; JT_T[1, 1]; JT_T[1, 2]; JT_T[1, 3]; JT_T[2, 2]; JT_T[2, 3]; JT_T[3, 3]; posTQ_Q]
 
-        δx₀ = rand(P0dist)
+        δx₀ = rand(P₀dist)
         x̂₀ = copy(x₀)
         ns = 12
         nav = NavState(0.0, updateNavState!(navData, x̂₀, δx₀), P₀, ns)

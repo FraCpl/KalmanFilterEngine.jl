@@ -7,22 +7,32 @@ function odeCore(t0, x0, Δt, f; nSteps=1)
     K1 = similar(x0);
     K2 = similar(x0);
     K3 = similar(x0);
-    K4 = similar(x0)
+    K4 = similar(x0);
+    Ktmp = similar(x0)
     @inbounds for _ in 1:nSteps
         K1 .= h .* f(t, x)
-        K2 .= h .* f(t + 1/3*h, x + K1/3)
-        K3 .= h .* f(t + 2/3*h, x - K1/3 + K2)
-        K4 .= h .* f(t + h, x + K1 - K2 + K3)
+
+        @. Ktmp = x + K1/3
+        K2 .= h .* f(t + 1/3*h, Ktmp)
+
+        @. Ktmp = x - K1/3 + K2
+        K3 .= h .* f(t + 2/3*h, Ktmp)
+
+        @. Ktmp = x + K1 - K2 + K3
+        K4 .= h .* f(t + h, Ktmp)
+
         t += h
-        x .+= (K1 + 3K2 + 3K3 + K4)/8
+        @. x += (K1 + 3K2 + 3K3 + K4)/8
     end
 
     return x
 end
 
 function odeAux!(K, P, t, x, Φ, f, Jf, h)
-    K .= h*f(t, x)
-    P .= h*Jf(t, x)*Φ
+    K .= f(t, x)
+    mul!(P, Jf(t, x), Φ)
+    K .*= h
+    P .*= h
 end
 
 function odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
@@ -33,19 +43,31 @@ function odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
     K1 = similar(x0);
     K2 = similar(x0);
     K3 = similar(x0);
-    K4 = similar(x0)
+    K4 = similar(x0);
+    Ktmp = similar(x0);
     P1 = similar(Φ0);
     P2 = similar(Φ0);
     P3 = similar(Φ0);
-    P4 = similar(Φ0)
+    P4 = similar(Φ0);
+    Ptmp = similar(Φ0);
     @inbounds for _ in 1:nSteps
         odeAux!(K1, P1, t, x, Φ, f, Jf, h)
-        odeAux!(K2, P2, t + 1/3*h, x + K1/3, Φ + P1/3, f, Jf, h)
-        odeAux!(K3, P3, t + 2/3*h, x - K1/3 + K2, Φ - P1/3 + P2, f, Jf, h)
-        odeAux!(K4, P4, t + h, x + K1 - K2 + K3, Φ + P1 - P2 + P3, f, Jf, h)
+
+        @. Ktmp = x + K1/3
+        @. Ptmp = Φ + P1/3
+        odeAux!(K2, P2, t + 1/3*h, Ktmp, Ptmp, f, Jf, h)
+
+        @. Ktmp = x - K1/3 + K2
+        @. Ptmp = Φ - P1/3 + P2
+        odeAux!(K3, P3, t + 2/3*h, Ktmp, Ptmp, f, Jf, h)
+
+        @. Ktmp = x + K1 - K2 + K3
+        @. Ptmp = Φ + P1 - P2 + P3
+        odeAux!(K4, P4, t + h, Ktmp, Ptmp, f, Jf, h)
+
         t += h
-        x .+= (K1 + 3K2 + 3K3 + K4)/8
-        Φ .+= (P1 + 3P2 + 3P3 + P4)/8
+        @. x += (K1 + 3K2 + 3K3 + K4)/8
+        @. Φ += (P1 + 3P2 + 3P3 + P4)/8
     end
 
     return x, Φ

@@ -12,6 +12,9 @@ struct NavData
     dX::Vector{Float64}
     J::Matrix{Float64}
     Fw::Matrix{Float64}
+    Q::Matrix{Float64}
+    R_SC::Matrix{Float64}
+    posCS_S::Vector{Float64}
     ypos::Vector{Float64}
     Hpos::Matrix{Float64}
     Rpos::Matrix{Float64}
@@ -29,7 +32,7 @@ struct NavData
     tmp7::Matrix{Float64}
 end
 
-function NavData(μ, n, Δt, wv, wω, stdPos, stdLos)
+function NavData(μ, n, Δt, wv, wω, stdPos, stdLos, R_SC, posCS_C)
     rT = (μ/n^2)^(1/3)
     qTmp = zeros(4)
     mJ1 = zeros(3, 6)
@@ -47,8 +50,14 @@ function NavData(μ, n, Δt, wv, wω, stdPos, stdLos)
     Mlos = zeros(2, 3)
     Rpos = stdPos^2*I(3)
     Rlos = stdLos^2*I(2)
-    return NavData(μ, n, rT, Δt, qTmp, mJ1, mJ2, mJ3, JT_T, invJT_T, dX, J, Fw, ypos, Hpos, Rpos, ylos,
+    Q = zeros(21, 21)
+    posCS_S = R_SC * posCS_C
+
+    nd = NavData(μ, n, rT, Δt, qTmp, mJ1, mJ2, mJ3, JT_T, invJT_T, dX, J, Fw, Q, R_SC, posCS_S, ypos, Hpos, Rpos, ylos,
         Hlos, Mlos, Rlos, zeros(3, 3), zeros(3), zeros(3), zeros(3), zeros(3, 3), zeros(3, 3), zeros(3, 3), zeros(3, 6))
+
+    nd.Q .= navProcessNoise(nd)
+    return nd
 end
 
 function multJ!(mJ, X)
@@ -75,7 +84,7 @@ function invJ!(iJ, J)
 end
 
 function updateQuat(q, δθ, qTmp)
-    c = 1 / sqrt(4 + δθ' * δθ)
+    c = 1 / sqrt(4 + dot(δθ, δθ))
     qTmp[1] = 2 * c
     @inbounds for i in 2:4
         qTmp[i] = c * δθ[i - 1]
@@ -218,8 +227,8 @@ end
 
 navProcessNoise(navData, x=zeros(22)) = computeQd(navDynJacobian(navData, x), navData.Fw, I, navData.Δt)
 
-function losMeas(navData::NavData, X, posQF_Q, R_CI, R_IL, R_SC, posCS_C)
-    posSF_S, _, Hpos = posMeas(navData, X, posQF_Q, R_CI, R_IL, R_SC, posCS_C)
+function losMeas(navData::NavData, X, posQF_Q, R_CI, R_IL)
+    posSF_S, _, Hpos = posMeas(navData, X, posQF_Q, R_CI, R_IL)
     xSF_S, ySF_S, zSF_S = posSF_S
     navData.ylos[1] = xSF_S / zSF_S
     navData.ylos[2] = ySF_S / zSF_S
@@ -235,26 +244,24 @@ function losMeas(navData::NavData, X, posQF_Q, R_CI, R_IL, R_SC, posCS_C)
     return navData.ylos, navData.Rlos, navData.Hlos
 end
 
-function posMeas(navData::NavData, X, posQF_Q, R_CI, R_IL, R_SC, posCS_C)
+function posMeas(navData::NavData, X, posQF_Q, R_CI, R_IL)
     # Compute measurement
     posTC_L = X[1:3]
     q_IT = X[7:10]
     posTQ_Q = X[20:22]
 
-    R_ST = R_SC * R_CI * q_toDcm(q_IT)
-    R_SL = R_SC * R_CI * R_IL
+    R_ST = navData.R_SC * R_CI * q_toDcm(q_IT)
+    R_SL = navData.R_SC * R_CI * R_IL
 
     posTF_S = navData.tmp1
-    posCS_S = navData.tmp2
     posTC_S = navData.tmp3
     posTF_Q = posTQ_Q + posQF_Q
     mul!(posTF_S, R_ST, posTF_Q)
-    mul!(posCS_S, R_SC, posCS_C)
     mul!(posTC_S, R_SL, posTC_L)
 
     y = navData.ypos
     @inbounds for i in eachindex(y)
-        y[i] = posTF_S[i] - posCS_S[i] - posTC_S[i]
+        y[i] = posTF_S[i] - navData.posCS_S[i] - posTC_S[i]
     end
 
     # Compute jacobian
@@ -272,10 +279,10 @@ function posMeas(navData::NavData, X, posQF_Q, R_CI, R_IL, R_SC, posCS_C)
 end
 
 # Define Kalman filter
-function kalmanFilter!(navState, navData, y, Q, R_CI, R_IL, R_SC, posCS_C, measFun)
+function kalmanFilter!(navState, navData, y, R_CI, R_IL, measFun)
     # Update step at t[k-1] with y[k-1]
     for yk in y
-        h(t, x) = measFun(navData, x, yk.posQF_Q, R_CI, R_IL, R_SC, posCS_C)
+        h(t, x) = measFun(navData, x, yk.posQF_Q, R_CI, R_IL)
         kalmanUpdateErrorScalar!(navState, 0.0, yk.yMeas, h)
     end
 
@@ -286,6 +293,6 @@ function kalmanFilter!(navState, navData, y, Q, R_CI, R_IL, R_SC, posCS_C, measF
     # Propagate state from t[k-1] to t[k]
     f(t, x) = navDyn(navData, x)
     Jf(t, x) = navDynJacobian(navData, x)
-    kalmanPropagate!(navState, navData.Δt, f, Jf, Q; nSteps=5)
+    kalmanPropagate!(navState, navData.Δt, f, Jf, navData.Q; nSteps=5)
     return nothing
 end

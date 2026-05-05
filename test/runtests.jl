@@ -76,7 +76,7 @@ function TEST_kalmanOde()
     f(x, μ) = [x[4:6]; -μ/norm(x[1:3])^3*x[1:3]]
     x = KalmanFilterEngine.odeCore(0.0, x0, Torb, (t, x) -> f(x, μ); nSteps=ceil(Int, Torb/1.0))
 
-    return norm(x[1:3] - x0[1:3]) < 100.0
+    return norm(x[1:3] - x0[1:3]) < 1e-3
 end
 
 function TEST_UDpropagate1()

@@ -4,35 +4,34 @@ function odeCore(t0, x0, Δt, f; nSteps=1)
     t = t0
     x = copy(x0)
     h = Δt/nSteps
-    K1 = similar(x0);
-    K2 = similar(x0);
-    K3 = similar(x0);
-    K4 = similar(x0);
+    K1 = similar(x0)
+    K2 = similar(x0)
+    K3 = similar(x0)
+    K4 = similar(x0)
     Ktmp = similar(x0)
     @inbounds for _ in 1:nSteps
-        K1 .= h .* f(t, x)
+        K1 .= f(t, x)
 
-        @. Ktmp = x + K1/3
-        K2 .= h .* f(t + 1/3*h, Ktmp)
+        @. Ktmp = x + h / 3 * K1
+        K2 .= f(t + h / 3, Ktmp)
 
-        @. Ktmp = x - K1/3 + K2
-        K3 .= h .* f(t + 2/3*h, Ktmp)
+        @. Ktmp = x - h / 3 * K1 + h * K2
+        K3 .= f(t + 2 / 3 * h, Ktmp)
 
-        @. Ktmp = x + K1 - K2 + K3
-        K4 .= h .* f(t + h, Ktmp)
+        @. Ktmp = x + h * (K1 - K2 + K3)
+        K4 .= f(t + h, Ktmp)
 
         t += h
-        @. x += (K1 + 3K2 + 3K3 + K4)/8
+        @. x += h / 8 * (K1 + 3 * K2 + 3 * K3 + K4)
     end
 
     return x
 end
 
-function odeAux!(K, P, t, x, Φ, f, Jf, h)
-    K .= f(t, x)
-    mul!(P, Jf(t, x), Φ)
-    K .*= h
-    P .*= h
+function odeAux!(dx, dΦ, t, x, Φ, f, Jf)
+    dx .= f(t, x)
+    mul!(dΦ, Jf(t, x), Φ)
+    return nothing
 end
 
 function odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
@@ -51,23 +50,23 @@ function odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
     P4 = similar(Φ0);
     Ptmp = similar(Φ0);
     @inbounds for _ in 1:nSteps
-        odeAux!(K1, P1, t, x, Φ, f, Jf, h)
+        odeAux!(K1, P1, t, x, Φ, f, Jf)
 
-        @. Ktmp = x + K1/3
-        @. Ptmp = Φ + P1/3
-        odeAux!(K2, P2, t + 1/3*h, Ktmp, Ptmp, f, Jf, h)
+        @. Ktmp = x + h / 3 * K1
+        @. Ptmp = Φ + h / 3 * P1
+        odeAux!(K2, P2, t + h / 3, Ktmp, Ptmp, f, Jf)
 
-        @. Ktmp = x - K1/3 + K2
-        @. Ptmp = Φ - P1/3 + P2
-        odeAux!(K3, P3, t + 2/3*h, Ktmp, Ptmp, f, Jf, h)
+        @. Ktmp = x - h / 3 * K1 + h * K2
+        @. Ptmp = Φ - h / 3 * P1 + h * P2
+        odeAux!(K3, P3, t + 2 / 3 * h, Ktmp, Ptmp, f, Jf)
 
-        @. Ktmp = x + K1 - K2 + K3
-        @. Ptmp = Φ + P1 - P2 + P3
-        odeAux!(K4, P4, t + h, Ktmp, Ptmp, f, Jf, h)
+        @. Ktmp = x + h * (K1 - K2 + K3)
+        @. Ptmp = Φ + h * (P1 - P2 + P3)
+        odeAux!(K4, P4, t + h, Ktmp, Ptmp, f, Jf)
 
         t += h
-        @. x += (K1 + 3K2 + 3K3 + K4)/8
-        @. Φ += (P1 + 3P2 + 3P3 + P4)/8
+        @. x += h / 8 * (K1 + 3 * K2 + 3 * K3 + K4)
+        @. Φ += h / 8 * (P1 + 3 * P2 + 3 * P3 + P4)
     end
 
     return x, Φ
@@ -89,7 +88,12 @@ end
 Compute the square-root of the diagonal of the navigation covariance matrix ``P``.
 """
 @inline function getStd(nav)
-    return sqrt.(diag(getCov(nav)))
+    σ = zeros(nav.ns)
+    P = getCov(nav)
+    @inbounds for i in eachindex(σ)
+        σ[i] = sqrt(P[i, i])
+    end
+    return σ
 end
 
 #=
@@ -104,11 +108,11 @@ end
     Q = computeQd(Fx, Fw, W, Δt)
 
 Generate the equivalent discrete-time process noise covariance matrix for a
-continuous time linear system ``\\dot x = F_x x + F_w w``, where ``w`` is a white noise of
+continuous time linear system ``ẋ = F_x x + F_w w``, where ``w`` is a white noise of
 power spectral density equal to ``W``.
 """
 function computeQd(Fx, Fw, W, Δt)
-    Q = Fw*W*Fw'
+    Q = Fw * W * Fw'
     n = size(Fx, 1)
 
     # Exact method for LTI, from: C. Van Loan, Computing integrals

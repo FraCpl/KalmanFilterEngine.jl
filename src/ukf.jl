@@ -9,6 +9,7 @@ mutable struct NavStateUKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}
     const Wc::Vector{Float64}   # UKF parameters
     const L::Int64              # Length of state vector
     X::Vector{T}                # Sigma point states
+    odeCache::ODECache
 end
 
 """
@@ -20,8 +21,8 @@ state and navigation covariance matrix.
 function NavStateUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
     L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
-
-    return NavStateUKF(t, x, P, ns, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)])
+    odeCache = ODECache(x, P)
+    return NavStateUKF(t, x, P, ns, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)], odeCache)
 end
 
 @inline function getCov(nav::NavStateUKF)
@@ -50,27 +51,30 @@ end
     end
 end
 
-function kalmanPropagate!(nav::NavStateUKF, Δt, f, Jf, Q; nSteps=1)
+function kalmanPropagate!(nav::NavStateUKF, Δt, f!, Jf!, p, Q; nSteps=1)
     # Create sigma points
     computeSigmaPoints!(nav)
 
-    # Propagate sigma points
-    nav.X = odeCore.(nav.t, nav.X, Δt, f; nSteps=nSteps)
+    # Propagate sigma points and compute mean state
+    fill!(nav.x, 0)
+    @inbounds for i in eachindex(nav.X)
+        odeSolve!(nav.X[i], nav.t, Δt, f!, p, nav.odeCache; nSteps=nSteps)
+        nav.x .+= nav.X[i] .* nav.Wm[i]
+    end
     nav.t = nav.t + Δt
 
-    # Compute mean state
-    nav.x = sum(nav.Wm .* nav.X)
-
     # Compute covariance estimate
-    nav.P .= Q
+    @inbounds for i in eachindex(Q)
+        nav.P[i] = Q[i]
+    end
     @inbounds for i in 1:(2 * nav.L + 1)
         δX = nav.X[i] - nav.x
         nav.P .+= nav.Wc[i] .* δX*δX'
     end
 end
 
-@inline function kalmanPropagate!(nav::NavStateUKF, Δt, f, Q; nSteps=1)
-    kalmanPropagate!(nav, Δt, f, nothing, Q, nSteps=nSteps)
+@inline function kalmanPropagate!(nav::NavStateUKF, Δt, f, p, Q; nSteps=1)
+    kalmanPropagate!(nav, Δt, f, nothing, p, Q, nSteps=nSteps)
 end
 
 @views function kalmanUpdate!(nav::NavStateUKF, t, y, h)

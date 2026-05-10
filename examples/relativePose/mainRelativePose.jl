@@ -47,8 +47,7 @@ function main(Nsim=1)
     Rdist = MvNormal(R)
     P₀dist = MvNormal(P₀)
 
-    trueDyn(t, x) = navDyn(trueData, x)
-
+    trueDyn! = navDyn!
     for _ in 1:Nsim
         Rot = dcm_fromEuler(12*π/180*randn(), 12*π/180*randn(), 12*π/180*randn())
         JT_T = Rot * diagm([3000; 2500.0; 1200.0]) * Rot'
@@ -61,7 +60,7 @@ function main(Nsim=1)
         x̂₀ = copy(x₀)
         nav = NavState(0.0, updateNavState!(navData, x̂₀, δx₀), P₀, 12)
         x = copy(x₀)
-        X = [x];
+        X = [copy(x)];
         T = [0.0];
         X̂ = [getState(nav)];
         σ = [getStd(nav)];
@@ -84,11 +83,11 @@ function main(Nsim=1)
             kalmanFilter!(nav, navData, y, R_CI, R_IL, measFun)
 
             # Propagate true dynamics from x[k] to x[k+1]
-            x = KalmanFilterEngine.odeCore(0, x, Δt, trueDyn; nSteps=5)# + rand(MvNormal(Q))
+            KalmanFilterEngine.odeSolve!(x, 0, Δt, trueDyn!, trueData, nav.odeCache; nSteps=5)
 
             # Save data for post-processing
             push!(T, nav.t)
-            push!(X, x)
+            push!(X, copy(x))
             push!(X̂, getState(nav))
             push!(σ, getStd(nav))
         end

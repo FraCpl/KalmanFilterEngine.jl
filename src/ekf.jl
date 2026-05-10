@@ -12,6 +12,7 @@ mutable struct NavStateEKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}
     KPyx::Matrix{Float64}
     xs::Vector{Float64}
     pxy::Vector{Float64}
+    odeCache::ODECache
 end
 
 """
@@ -22,7 +23,8 @@ state and navigation covariance matrix.
 """
 function NavStateEKF(t, x, P, ns=size(P, 1))
     nδ = size(P, 1)
-    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, 6, nδ, zeros(ns, ns), zeros(ns, nδ - ns), zeros(ns), zeros(nδ))
+    odeCache = ODECache(x, P)
+    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, 6, nδ, zeros(ns, ns), zeros(ns, nδ - ns), zeros(ns), zeros(nδ), odeCache)
 end
 
 """
@@ -40,35 +42,27 @@ getCov(nav::NavStateEKF) = nav.P
 
 Propagate navigation state forward in time for ```Δt``` time units.
 
-Inputs include the dynamics function ```ẋ = f(t, x)```, dynamics jacobian
-function ```Fx = Jf(t, x)```, and equivalent discrete-time process noise
+Inputs include the dynamics function ```f!(ẋ, x, p, t)```, dynamics jacobian
+function ```Jf!(Fx, x, p, t)```, and equivalent discrete-time process noise
 covariance matrix ```Q```. The optional keyword argument ```nSteps``` indicates the
 number of RK4 steps to be performed when numerically integrating the system's
 dynamics. This function is only applicable to EKF and UDEKF.
 """
-function kalmanPropagate!(nav::NavStateEKF, Δt, f, Jf, Q; nSteps=1)
-    Φ = kalmanPropagateState!(nav, Δt, f, Jf; nSteps=nSteps)
+function kalmanPropagate!(nav::NavStateEKF, Δt, f!, Jf!, p, Q; nSteps=1)
+    _, Φ = odeSolve!(nav.x, nav.t, Δt, f!, Jf!, p, nav.odeCache; nSteps=nSteps)
     kalmanPropagateCov!(nav, Φ, Q)
-    return nothing
-end
-
-# This function propagates the full navigation state from the current
-# time to the current time plus Δt using a Runge-Kutta algorithm. It
-# also computes the state transition matrix by numerical integration
-# of the Jacobian of the dynamics.
-function kalmanPropagateState!(nav, Δt, f, Jf; nSteps=1)
-    nav.x, Φ = odeCore(nav.t, nav.x, Matrix(1.0I, nav.nδ, nav.nδ), Δt, f, Jf; nSteps=nSteps)
     nav.t += Δt
-    return Φ
+    return nothing
 end
 
 # This function implements the covariance propagation formula
 # P[k+1] = ϕ*P[k]*ϕᵀ + Q
-function kalmanPropagateCov!(nav::NavStateEKF, Φ, Q, tmp=similar(nav.P))
+function kalmanPropagateCov!(nav::NavStateEKF, Φ, Q)
+    tmp = nav.odeCache.P1
     mul!(tmp, nav.P, transpose(Φ))
     mul!(nav.P, Φ, tmp)
     nav.P .+= Q
-    return nothing
+    return nav.P
 end
 
 # """
@@ -204,7 +198,7 @@ end
 
         # Innovation and normalized innovation
         δy[i] = y[i] - ŷ[i] - δy[i]     # Fix innovation definition wrt mul!()
-        δz[i] = δy[i]/sqrt(Pyy[i, i])
+        δz[i] = δy[i] / sqrt(Pyy[i, i])
 
         # Check rejection threshold
         if abs(δz[i]) > nav.σᵣ
@@ -216,7 +210,7 @@ end
     # Update error state and covariance matrix
     if !isRejected
         # Error state update
-        Ks = Pxy[1:nav.ns, :]/Pyy    # Kalman Gain
+        Ks = Pxy[1:nav.ns, :] / Pyy    # Kalman Gain
         mul!(nav.xs, Ks, δy)
         nav.δx[1:nav.ns] .+= nav.xs
 
@@ -305,6 +299,8 @@ end
 
 # This update routine implements an IEKF
 @views function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter)
+    iter == 0 && return kalmanUpdate!(nav, t, y, h)
+
     # Estimated measurement and jacobians
     ŷ, R, H = h(t, nav.x)
     Pxy = nav.P*H'

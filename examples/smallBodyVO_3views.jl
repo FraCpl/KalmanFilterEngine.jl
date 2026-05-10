@@ -3,11 +3,13 @@ using KalmanFilterEngine
 using Quats
 using DifferentialEquations
 using Distributions
-using ForwardDiff
-using Plots#: plot!, plot, plotlyjs
+# using ForwardDiff
+# using Plots#: plot!, plot, plotlyjs
 #using OrbitalMechanics: KepOrbit, getState
 #plotlyjs()
 #plotly()
+
+# TODO: Update ODE
 
 # Global constants
 const μ = 4.89
@@ -15,8 +17,50 @@ const ω = 4.070264113792746e-04   # planet rotation rate along zB ≡ zI
 planetAttitude(t) = [cos(ω*t/2.0); 0.0; 0.0; sin(ω*t/2.0)]  # q_IP
 
 # Define Navigation Problem
-f(t, x) = [x[4:6]; -μ/norm(x[1:3])^3*x[1:3]; zeros(6)]
-Jf(t, x) = ForwardDiff.jacobian(x -> f(t, x), x)
+function f!(dx, x, μ, t)
+    X, Y, Z = x[1], x[2], x[3]
+    c = -μ / sqrt(X*X + Y*Y + Z*Z)^3
+    @inbounds for i in 1:3
+        dx[i] = x[i+3]
+        dx[i+3] = c * x[i]
+    end
+end
+
+function Jf!(J, x, μ, t)
+    X, Y, Z = x[1], x[2], x[3]
+
+    r2 = X*X + Y*Y + Z*Z
+    r  = sqrt(r2)
+    r3 = r2 * r
+    r5 = r3 * r2
+
+    μ_r3 = μ / r3
+    μ_r5 = μ / r5
+
+    fill!(J, 0.0)
+
+    @inbounds begin
+        # top-right identity
+        J[1,4] = 1.0
+        J[2,5] = 1.0
+        J[3,6] = 1.0
+
+        # bottom-left block
+        J[4,1] = -μ_r3 + 3μ_r5*X*X
+        J[4,2] = 3μ_r5*X*Y
+        J[4,3] = 3μ_r5*X*Z
+
+        J[5,1] = 3μ_r5*Y*X
+        J[5,2] = -μ_r3 + 3μ_r5*Y*Y
+        J[5,3] = 3μ_r5*Y*Z
+
+        J[6,1] = 3μ_r5*Z*X
+        J[6,2] = 3μ_r5*Z*Y
+        J[6,3] = -μ_r3 + 3μ_r5*Z*Z
+    end
+
+    return nothing
+end
 
 function voMeas(x, q1_IB, q2_IB, t1, t2, t3)
     # x1 = x[k-2], x2 ≡ x[k-1], x3 ≡ x[k]
@@ -35,6 +79,7 @@ function voMeas(x, q1_IB, q2_IB, t1, t2, t3)
     r23_P = pos3_P - pos2_P
     return [q_transformVector(q1_BP, r12_P ./ ρ); q_transformVector(q2_BP, r23_P ./ ρ)]
 end
+
 function h(x, q1_IB, q2_IB, t1, t2, t3)
     (voMeas(x, q1_IB, q2_IB, t1, t2, t3), Matrix((0.01^2)*I, 6, 6), ForwardDiff.jacobian(x -> voMeas(x, q1_IB, q2_IB, t1, t2, t3), x))  # ỹ, R, H
 end  # ỹ, R, H

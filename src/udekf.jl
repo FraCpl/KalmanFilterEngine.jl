@@ -7,6 +7,8 @@ mutable struct NavStateUD{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64},
     const ns::Int64         # Number of solve for (error) states
     const σᵣ::Int64         # Outlier rejection threshold
     const nδ::Int64         # Number of error states
+
+    odeCache::ODECache
 end
 
 """
@@ -18,7 +20,8 @@ state and navigation covariance matrix.
 function NavStateUD(t, x, P, ns=size(P, 1))
     U, D = UD(P)
     nδ = size(U, 1)
-    return NavStateUD(t, x, U, D, zero(P[:, 1]), ns, 6, nδ)
+    odeCache = ODECache(x, P)
+    return NavStateUD(t, x, U, D, zero(P[:, 1]), ns, 6, nδ, odeCache)
 end
 
 getCov(nav::NavStateUD) = nav.U*diagm(nav.D)*nav.U'
@@ -179,9 +182,11 @@ end
     return Ū, D̄
 end
 
-function kalmanPropagate!(nav::NavStateUD, Δt, f, Jf, Q; nSteps=1)
-    Φ = kalmanPropagateState!(nav, Δt, f, Jf; nSteps=nSteps)
+function kalmanPropagate!(nav::NavStateUD, Δt, f!, Jf!, p, Q; nSteps=1)
+    _, Φ = odeSolve!(nav.x, nav.t, Δt, f!, Jf!, p, nav.odeCache; nSteps=nSteps)
     nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, size(nav.x, 1))  # TODO: update nc: number of fully correlated states
+    nav.t += Δt
+    return nothing
 end
 
 # function kalmanPropagate!(nav::NavStateUD, Δt, f, Q; nSteps=1)

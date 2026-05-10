@@ -5,6 +5,7 @@ module KalmanFilterEngine
 using LinearAlgebra#, ForwardDiff
 
 export generatePosDefMatrix, getStd, computeQd
+include("ode.jl")
 include("utils.jl")
 
 export NavState, AbstractNavState, getState

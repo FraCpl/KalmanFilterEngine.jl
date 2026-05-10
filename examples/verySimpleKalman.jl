@@ -1,5 +1,17 @@
 using KalmanFilterEngine, LinearAlgebra, Distributions, GLMakie
 
+function f!(dx, x, p, t)
+    dx[1] = x[4]
+    dx[2] = x[5]
+    dx[3] = x[6]
+end
+
+function Jf!(Fx, x, p, t)
+    @inbounds for i in 1:3
+        Fx[i, i+3] = 1.0
+    end
+end
+
 function main()
     # True state parameters & state transition matrix
     x₀ = zeros(6)                                   # True initial state
@@ -9,14 +21,16 @@ function main()
     # Define navigation problem
     Q = diagm([1e-4*ones(3); 1e-3*ones(3)] .^ 2)   # Process noise covariance
     R = 0.0483*Matrix(I, 3, 3)                        # Measurement noise covariance
-    f(t, x) = [x[4:6]; zeros(3)]                    # System dynamics
-    Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
+    # f(t, x) = [x[4:6]; zeros(3)]                    # System dynamics
+    # Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
     h(t, x) = (x[1:3], R, [I zeros(3, 3)])          # Measurement equation
+    Qrnd = MvNormal(Q)
+    Rrnd = MvNormal(R)
 
     # Initialize navigation state
     P₀ = generatePosDefMatrix(6)            # Initial state uncertainty covariance
     x̂₀ = x₀ + rand(MvNormal(P₀))            # Initial estimated state
-    nav = NavState(0.0, x̂₀, P₀; type=:UDEKF)
+    nav = NavState(0.0, x̂₀, P₀)
 
     # Simulate Kalman filter
     T = [];
@@ -26,14 +40,14 @@ function main()
     x = x₀
     for k in 1:100
         # Generate measurement
-        y = x[1:3] + rand(MvNormal(R))
+        y = x[1:3] + rand(Rrnd)
 
         # Execute Kalman filter step
         kalmanUpdate!(nav, 0.0, y, h)
-        kalmanPropagate!(nav, Δt, f, Jf, Q)
+        kalmanPropagate!(nav, Δt, f!, Jf!, 0.0, Q)
 
         # Simulate system dynamics
-        x .= Φ*x + rand(MvNormal(Q))
+        x .= Φ*x + rand(Qrnd)
 
         # Save for post-processing
         push!(T, nav.t)

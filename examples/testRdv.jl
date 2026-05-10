@@ -76,8 +76,8 @@ function main()
         kalmanPropagateCov!(nav, Φ, Q)
     end
 
-    dx = zeros(6)
-    function trueDyn(t, x)
+    function trueDyn!(dx, x, p, t)
+        Rorb, μ = p
         x, y, z, vx, vy, vz = x
         xC = x; yC = y; zC = z - Rorb
         rC = sqrt(xC * xC + yC * yC + zC * zC)
@@ -117,13 +117,15 @@ function main()
     Q = computeQd(Jf, [zeros(3, 3); I], 1e-6I, Δt)
     Rdist = MvNormal(R)
     P0dist = MvNormal(P₀)
+    p = (Rorb, μ)
+    oc = KalmanFilterEngine.ODECache(x₀)
 
     for nSim in 1:100
         @show nSim
         x̂₀ = x₀ + rand(P0dist)
         nav = NavState(0.0, x̂₀, P₀)
         x = copy(x₀)
-        X = [x];
+        X = [copy(x)];
         T = [0.0];
         X̂ = [getState(nav)];
         σ = [getStd(nav)];
@@ -138,11 +140,12 @@ function main()
             kalmanFilter!(nav, Δt, ty, y, Q)
 
             # Propagate true dynamics from x[k] to x[k+1]
-            x = KalmanFilterEngine.odeCore(0, x, Δt, trueDyn; nSteps=5)# + rand(MvNormal(Q))
+            KalmanFilterEngine.odeSolve!(x, 0.0, Δt, trueDyn!, p, oc; nSteps=5)
+            # + rand(MvNormal(Q))
 
             # Save data for post-processing
             push!(T, nav.t)
-            push!(X, x)
+            push!(X, copy(x))
             push!(X̂, getState(nav))
             push!(σ, getStd(nav))
         end

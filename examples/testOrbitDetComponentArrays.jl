@@ -8,17 +8,10 @@ using GLMakie
 using Random
 using JTools
 using ComponentArrays
-#=
-# Define Navigation Problem - OD1
-f(t, x) = [x[4:6]; -3.986e14/norm(x[1:3])^3*x[1:3]]
-Jf(t, x) = ForwardDiff.jacobian(x -> f(t, x), x)
-rangeLosMeas(x) = [norm(x[1:3]); atan(x[2], x[1]); asin(x[3]/norm(x[1:3]))]
-h(t, x) = (rangeLosMeas(x), diagm([500; 0.001; 0.001].^2), ForwardDiff.jacobian(rangeLosMeas, x))  # ỹ, R, H
-=#
 
 # Define Navigation Problem - OD2
-f(t, x) = [x.vel; zeros(3)]
-Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
+f!(dx, x, p, t) = @inbounds for i in 1:3; dx[i] = x[i+3]; end
+Jf!(F, x, p, t) = @inbounds for i in 1:3; F[i, i+3] = 1; end
 h(t, x) = (x[1:3], diagm([10.0; 10.0; 10.0] .^ 2), [I zeros(3, 3)])  # ỹ, R, H
 
 # Define Kalman filter
@@ -28,11 +21,9 @@ function kalmanFilter!(nav, Δt, ty, y, Q, iter=0)
     else
         kalmanUpdateIter!(nav, ty, y, h, iter)
     end                                 # Update step at t[k-1] with y[k-1]
-    if hasfield(typeof(nav), :P)
-        ;
-        nav.P = 0.5(nav.P + nav.P')
-    end       # Sym P
-    kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps=ceil(Int, Δt/10.0))    # Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
+
+    # hasfield(typeof(nav), :P) && nav.P = 0.5(nav.P + nav.P')       # Sym P
+    kalmanPropagate!(nav, Δt, f!, Jf!, 0, Q; nSteps=ceil(Int, Δt/10.0))    # Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
 end
 
 # Run
@@ -55,9 +46,10 @@ function main(; showplot=true)
 
     Δt = 100.0
     Q = computeQd([zeros(3, 3) I; zeros(3, 6)], [zeros(3, 3); I], 0.01I, Δt)
+    Qrnd = MvNormal(Q)
 
     x = nav.x + rand(MvNormal(getCov(nav)))
-    X = [x];
+    X = [copy(x)];
     T = [0.0];
     X̂ = [getState(nav)];
     σ = [getStd(nav)];
@@ -69,6 +61,7 @@ function main(; showplot=true)
     σsrukf = [getStd(navSRUKF)]
     X̂iekf = [getState(navIEKF)];
     σiekf = [getStd(navIEKF)]
+    oc = KalmanFilterEngine.ODECache(x)
 
     for k in 1:100
         # Generate measurement at t[k]
@@ -84,12 +77,13 @@ function main(; showplot=true)
         kalmanFilter!(navIEKF, Δt, ty, y, Q, 3)
 
         # Propagate true dynamics from x[k] to x[k+1]
-        x = KalmanFilterEngine.odeCore(0, x, Δt, f; nSteps=1) + rand(MvNormal(Q))
+        KalmanFilterEngine.odeSolve!(x, 0.0, Δt, f!, 0, oc; nSteps=1)
+        x .+= rand(Qrnd)
 
         # Save data for post-processing
         #if showplot
         push!(T, nav.t)
-        push!(X, x)
+        push!(X, copy(x))
         push!(X̂, getState(nav))
         push!(σ, getStd(nav))
         push!(X̂ud, getState(navUD))

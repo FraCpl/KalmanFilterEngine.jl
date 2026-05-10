@@ -9,6 +9,7 @@ mutable struct NavStateSRUKF{T<:AbstractVector{Float64}} <: AbstractNavState
     const Wc::Vector{Float64}   # UKF parameters
     const L::Int64              # Length of state vector
     X::Vector{T}                # Sigma point states
+    odeCache::ODECache
 end
 
 """
@@ -21,8 +22,8 @@ function NavStateSRUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
     S = cholesky(P).U.data
     L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
-
-    return NavStateSRUKF(t, x, S, ns, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)])
+    odeCache = ODECache(x, P)
+    return NavStateSRUKF(t, x, S, ns, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)], odeCache)
 end
 
 getCov(nav::NavStateSRUKF) = nav.S'*nav.S
@@ -35,16 +36,17 @@ getCov(nav::NavStateSRUKF) = nav.S'*nav.S
     end
 end
 
-@views function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Jf, Q; nSteps=1)
+@views function kalmanPropagate!(nav::NavStateSRUKF, Δt, f!, Jf, p, Q; nSteps=1)
     # Create sigma points
     computeSigmaPoints!(nav)
 
     # Propagate sigma points
-    nav.X = odeCore.(nav.t, nav.X, Δt, f; nSteps=nSteps)
+    fill!(nav.x, 0)
+    @inbounds for i in eachindex(nav.X)
+        odeSolve!(nav.X[i], nav.t, Δt, f!, p, nav.odeCache; nSteps=nSteps)
+        nav.x .+= nav.X[i] .* nav.Wm[i]
+    end
     nav.t = nav.t + Δt
-
-    # Compute mean state
-    nav.x = sum(nav.Wm .* nav.X)
 
     # Calculate covariance estimate
     M = zeros(nav.L, 2*nav.L)
@@ -58,8 +60,8 @@ end
     cholupdate!(nav.S, δX1, sign(nav.Wc[1]))
 end
 
-function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, Q; nSteps=1)
-    kalmanPropagate!(nav, Δt, f, nothing, Q; nSteps=nSteps)
+function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, p, Q; nSteps=1)
+    kalmanPropagate!(nav, Δt, f, nothing, p, Q; nSteps=nSteps)
 end
 
 @views function kalmanUpdate!(nav::NavStateSRUKF, t, y, h)
@@ -90,7 +92,7 @@ end
 
     # Measurement editing
     δy = y - ŷ
-    δz = δy ./ sqrt.(diag(Syy'*Syy))              # Normalized innovation
+    δz = δy ./ sqrt.(diag(Syy'*Syy))           # Normalized innovation
     isRejected = maximum(abs, δz) > nav.σᵣ     # σ rejection threshold
 
     # Update error state and covariance matrix

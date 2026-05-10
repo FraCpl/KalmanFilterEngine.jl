@@ -31,7 +31,6 @@ function kalmanFilter!(nav, Δt, ty, y, Q, isScalar)
     nav.x .+= nav.δx
     nav.δx .= 0.0
     if hasfield(typeof(nav), :P)
-        ;
         nav.P = 0.5(nav.P + nav.P')
     end       # Sym P
     kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps=ceil(Int, Δt/10.0))    # Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
@@ -70,7 +69,7 @@ function main(; showplot=true)
 
         # Propagate true dynamics from x[k] to x[k+1]
         #sol = solve(ODEProblem((x, p, t) -> f(t, x), x, (0, Δt)))
-        x = KalmanFilterEngine.odeCore(0, x, Δt, f; nSteps=1) + [rand(MvNormal(Q[1:6, 1:6])); zeros(3)]
+        x = KalmanFilterEngine.odeSolve(0, x, Δt, f; nSteps=1) + [rand(MvNormal(Q[1:6, 1:6])); zeros(3)]
 
         # Save data for post-processing
         #if showplot

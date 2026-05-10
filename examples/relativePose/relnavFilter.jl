@@ -110,10 +110,10 @@ end
 # xEst = [posTC_L; velTC_L; q_IT; ωIT_T;  JT_T; posTQ_Q]
 # error =[    1:3;     4:6;  7:9; 10:12; 13:18;  19:21]
 # full = [    1:3;     4:6; 7:10; 11:13; 14:19;  20:22]
-function navDyn(navData::NavData, X)
+function navDyn!(dX, X, navData::NavData, t)
     μ = navData.μ
     n = navData.n
-    dX = navData.dX
+    # dX = navData.dX
     JT_T = navData.JT_T
     rT = navData.rT
 
@@ -166,9 +166,11 @@ function navDyn(navData::NavData, X)
     return dX
 end
 
-function navDynJacobian(navData, X)
+navDynJacobian(X, navData, t) = navDynJacobian!(navData.J, X, navData, t)
+
+function navDynJacobian!(J, X, navData, t)
     n = navData.n
-    J = navData.J
+    # J = navData.J
     WIT_T = navData.WIT_T
     JT_T = navData.JT_T
 
@@ -225,7 +227,7 @@ function navDynJacobian(navData, X)
     return J
 end
 
-navProcessNoise(navData, x=zeros(22)) = computeQd(navDynJacobian(navData, x), navData.Fw, I, navData.Δt)
+navProcessNoise(navData, x=zeros(22)) = computeQd(navDynJacobian(x, navData, 0.0), navData.Fw, I, navData.Δt)
 
 function losMeas(navData::NavData, X, posQF_Q, R_CI, R_IL)
     posSF_S, _, Hpos = posMeas(navData, X, posQF_Q, R_CI, R_IL)
@@ -291,8 +293,6 @@ function kalmanFilter!(navState, navData, y, R_CI, R_IL, measFun)
     navState.P .= 0.5 .* (navState.P + navState.P')
 
     # Propagate state from t[k-1] to t[k]
-    f(t, x) = navDyn(navData, x)
-    Jf(t, x) = navDynJacobian(navData, x)
-    kalmanPropagate!(navState, navData.Δt, f, Jf, navData.Q; nSteps=5)
+    kalmanPropagate!(navState, navData.Δt, navDyn!, navDynJacobian!, navData, navData.Q; nSteps=5)
     return nothing
 end

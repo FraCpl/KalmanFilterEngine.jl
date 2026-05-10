@@ -66,6 +66,7 @@ end
 function TEST_kalmanOde()
     μ = 3.986e14
     x0 = [6380e3+500e3; 0.0; 1.5e2; 0.0; sqrt(μ/(6380e3+500e3))*1.03; 0.0]
+    oc = KalmanFilterEngine.ODECache(x0)
 
     r = norm(x0[1:3])
     rV²μ = r*(norm(x0[4:6])^2)/μ
@@ -73,8 +74,11 @@ function TEST_kalmanOde()
 
     Torb = 2π*sqrt(sma^3/μ)
 
-    f(x, μ) = [x[4:6]; -μ/norm(x[1:3])^3*x[1:3]]
-    x = KalmanFilterEngine.odeCore(0.0, x0, Torb, (t, x) -> f(x, μ); nSteps=ceil(Int, Torb/1.0))
+    function f!(dx, x, μ, t)
+        dx[1:3] .= x[4:6]
+        dx[4:6] = -μ/norm(x[1:3])^3*x[1:3]
+    end
+    x = KalmanFilterEngine.odeCore!(x0, 0.0, Torb, f!, μ, oc; nSteps=ceil(Int, Torb/1.0))
 
     return norm(x[1:3] - x0[1:3]) < 1e-3
 end
@@ -205,17 +209,20 @@ function TEST_simpleKalman(type::Symbol)
     x̂₀ = x₀ + rand(MvNormal(P₀))
     Φ = I + [zeros(3, 3) Δt*I; zeros(3, 6)]
 
-    f(t, x) = [x[4:6]; zeros(3)]
-    Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
+    f!(dx, x, p, t) = @inbounds for i in 1:3; dx[i] = x[i+3]; end
+    Jf!(Fx, x, p, t) = @inbounds for i in 1:3; Fx[i, i+3] = 1.0; end
     h(t, x) = (x[1:3], 0.483*Matrix(I, 3, 3), [I zeros(3, 3)])
-    Q = computeQd(Jf(0.0, zeros(6)), [zeros(3, 3); I], 0.005616*Matrix(I, 3, 3), Δt)
+
+    J0 = zeros(6, 6)
+    Jf!(J0, zeros(6), 0.0, 0.0)
+    Q = computeQd(J0, [zeros(3, 3); I], 0.005616*Matrix(I, 3, 3), Δt)
     dummy, R, H = h(0, zeros(6))
 
     nav = NavState(0.0, x̂₀, P₀; type=type)
 
     function klm!(nav, y)
         kalmanUpdate!(nav, 0.0, y, h)
-        kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps=10)
+        kalmanPropagate!(nav, Δt, f!, Jf!, 0.0, Q; nSteps=10)
     end
 
     function klmSimple(x̂, P, y)

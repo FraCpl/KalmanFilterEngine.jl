@@ -3,7 +3,6 @@ mutable struct NavStateUKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}
     x::T                        # Full estimated state, x[t]
     P::M                        # Covariance matrix P[t]
     const ns::Int64             # Number of solve for states
-    const σᵣ::Int64             # Outlier rejection threshold
     const γ::Float64            # UKF parameters
     const Wm::Vector{Float64}   # UKF parameters
     const Wc::Vector{Float64}   # UKF parameters
@@ -22,7 +21,7 @@ function NavStateUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
     L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
     odeCache = ODECache(x, P)
-    return NavStateUKF(t, x, P, ns, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)], odeCache)
+    return NavStateUKF(t, x, P, ns, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)], odeCache)
 end
 
 @inline function getCov(nav::NavStateUKF)
@@ -77,7 +76,7 @@ end
     kalmanPropagate!(nav, Δt, f, nothing, p, Q, nSteps=nSteps)
 end
 
-@views function kalmanUpdate!(nav::NavStateUKF, t, y, h)
+@views function kalmanUpdate!(nav::NavStateUKF, t, y, h; nReject::Int=6)
     # Create sigma points
     computeSigmaPoints!(nav)
 
@@ -99,7 +98,7 @@ end
     # Measurement editing
     δy = y - ŷ
     δz = δy ./ sqrt.(diag(Pyy))                   # Normalized innovation
-    isRejected = maximum(abs, δz) > nav.σᵣ     # σ rejection threshold
+    isRejected = maximum(abs, δz) > nReject     # σ rejection threshold
 
     # Update error state and covariance matrix
     if !isRejected

@@ -5,7 +5,6 @@ mutable struct NavStateUD{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64},
     D::X                    # Covariance Matrix UD, D[t]
     δx::X                   # Error state, δx[t]
     const ns::Int64         # Number of solve for (error) states
-    const σᵣ::Int64         # Outlier rejection threshold
     const nδ::Int64         # Number of error states
 
     odeCache::ODECache
@@ -21,7 +20,7 @@ function NavStateUD(t, x, P, ns=size(P, 1))
     U, D = UD(P)
     nδ = size(U, 1)
     odeCache = ODECache(x, P)
-    return NavStateUD(t, x, U, D, zero(P[:, 1]), ns, 6, nδ, odeCache)
+    return NavStateUD(t, x, U, D, zero(P[:, 1]), ns, nδ, odeCache)
 end
 
 getCov(nav::NavStateUD) = nav.U*diagm(nav.D)*nav.U'
@@ -268,7 +267,7 @@ function UDpropagate(U, D, Φ, Q, nc)
     return Ū, D̄
 end
 
-@views function kalmanUpdateError!(nav::NavStateUD, t, y, h)
+@views function kalmanUpdateError!(nav::NavStateUD, t, y, h; nReject::Int=6)
     # Estimated measurement and jacobians
     ŷ, R, H = h(t, nav.x)
 
@@ -290,7 +289,7 @@ end
         # Measurement Editing (innovation check)
         δy[i] = y[i] - ŷ[i] - H[i, :]'*nav.δx
         δz[i] = δy[i]/sqrt(Ph[1] + R[i, i])
-        isRejected = abs(δz[i]) > nav.σᵣ
+        isRejected = abs(δz[i]) > nReject
 
         # Update the state and covariance estimates for non-optimal K
         # (to be used with consider and underweighted gain instead of the optimal formula: P = P - K*Pyy*K')

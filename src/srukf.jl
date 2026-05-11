@@ -3,7 +3,6 @@ mutable struct NavStateSRUKF{T<:AbstractVector{Float64}} <: AbstractNavState
     x::T                        # Full estimated state, x[t]
     S::Matrix{Float64}          # Cholesky decomposition of covariance matrix S[t]
     const ns::Int64             # Number of solve for states
-    const σᵣ::Int64             # Outlier rejection threshold
     const γ::Float64            # UKF parameters
     const Wm::Vector{Float64}   # UKF parameters
     const Wc::Vector{Float64}   # UKF parameters
@@ -23,7 +22,7 @@ function NavStateSRUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
     L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
     odeCache = ODECache(x, P)
-    return NavStateSRUKF(t, x, S, ns, 6, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)], odeCache)
+    return NavStateSRUKF(t, x, S, ns, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)], odeCache)
 end
 
 getCov(nav::NavStateSRUKF) = nav.S'*nav.S
@@ -64,7 +63,7 @@ function kalmanPropagate!(nav::NavStateSRUKF, Δt, f, p, Q; nSteps=1)
     kalmanPropagate!(nav, Δt, f, nothing, p, Q; nSteps=nSteps)
 end
 
-@views function kalmanUpdate!(nav::NavStateSRUKF, t, y, h)
+@views function kalmanUpdate!(nav::NavStateSRUKF, t, y, h; nReject::Int=6)
     # Create sigma points
     computeSigmaPoints!(nav)
 
@@ -93,7 +92,7 @@ end
     # Measurement editing
     δy = y - ŷ
     δz = δy ./ sqrt.(diag(Syy'*Syy))           # Normalized innovation
-    isRejected = maximum(abs, δz) > nav.σᵣ     # σ rejection threshold
+    isRejected = maximum(abs, δz) > nReject    # σ rejection threshold
 
     # Update error state and covariance matrix
     if !isRejected

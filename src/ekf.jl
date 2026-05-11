@@ -4,11 +4,9 @@ mutable struct NavStateEKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}
     P::M                    # Covariance Matrix, P[t]
     δx::D                   # Error state, δx[t]
     const ns::Int64         # Number of solve for (error) states
-    const σᵣ::Int64         # Outlier rejection threshold
     const nδ::Int64         # Number of error states
 
     # Internal allocation variables
-    KPyyK::Matrix{Float64}
     KPyx::Matrix{Float64}
     xs::Vector{Float64}
     pxy::Vector{Float64}
@@ -24,7 +22,7 @@ state and navigation covariance matrix.
 function NavStateEKF(t, x, P, ns=size(P, 1))
     nδ = size(P, 1)
     odeCache = ODECache(x, P)
-    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, 6, nδ, zeros(ns, ns), zeros(ns, nδ - ns), zeros(ns), zeros(nδ), odeCache)
+    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, nδ, zeros(ns, nδ - ns), zeros(ns), zeros(nδ), odeCache)
 end
 
 """
@@ -89,8 +87,8 @@ Inputs include the measurement time ```t```, measurement ```y```,
 measurement equation function ```ŷ, R, H = h(t, x)```. When using SRUKF or UKF, the
 measurement function only needs to provide ```ŷ``` and ```R``` as outputs.
 """
-function kalmanUpdate!(nav::NavStateEKF, t, y, h)
-    δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h)
+function kalmanUpdate!(nav::NavStateEKF, t, y, h; nReject::Int=6)
+    δy, δz, isRejected = kalmanUpdateError!(nav, t, y, h; nReject=nReject)
     nav.x .+= nav.δx
     nav.δx .= 0.0       # reset error state
 
@@ -106,19 +104,20 @@ function kalmanUpdate!(
     δy=zero(y),                                                       # Save allocations
     δz=zero(y),                                                       # Save allocations
     Pxy=Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)),              # Save allocations
-    Pyy=Matrix{eltype(nav.P)}(undef, size(R)),                        # Save allocations
+    Pyy=Matrix{eltype(nav.P)}(undef, size(R));                        # Save allocations
+    nReject::Int=6
 )
     nav.δx .= 0.0       # Better safe than sorry
-    isRejected = kalmanUpdateError!(nav, y, ŷ, R, H, δy, δz, Pxy, Pyy)
+    isRejected = kalmanUpdateError!(nav, y, ŷ, R, H, δy, δz, Pxy, Pyy; nReject=nReject)
     nav.x .+= nav.δx
     nav.δx .= 0.0       # reset error state
 
     return isRejected
 end
 
-function kalmanUpdateScalar!(nav::NavStateEKF, t, y, h)
+function kalmanUpdateScalar!(nav::NavStateEKF, t, y, h; nReject::Int=6)
     nav.δx .= 0.0       # Better safe than sorry
-    δy, δz, isRejected = kalmanUpdateErrorScalar!(nav, t, y, h)
+    δy, δz, isRejected = kalmanUpdateErrorScalar!(nav, t, y, h; nReject=nReject)
     nav.x .+= nav.δx
     nav.δx .= 0.0       # reset error state
 
@@ -132,10 +131,11 @@ function kalmanUpdateScalar!(
     R,
     H,
     δy=zero(y),                                                       # Save allocations
-    δz=zero(y),                                                       # Save allocations
+    δz=zero(y);                                                       # Save allocations
+    nReject::Int=6
 )
     nav.δx .= 0.0       # Better safe than sorry
-    isRejected = kalmanUpdateErrorScalar!(nav, y, ŷ, R, H, δy, δz)
+    isRejected = kalmanUpdateErrorScalar!(nav, y, ŷ, R, H, δy, δz; nReject=nReject)
     nav.x .+= nav.δx
     nav.δx .= 0.0       # reset error state
 
@@ -151,7 +151,7 @@ Inputs include the measurement time ```t```, measurement ```y```,
 measurement equation function ```ŷ, R, H = h(t, x)```. This function is only applicable
 to EKF and UDEKF.
 """
-function kalmanUpdateError!(nav::NavStateEKF, t, y, h)
+function kalmanUpdateError!(nav::NavStateEKF, t, y, h; nReject::Int=6)
     # Predict measurement, and compute noise covariance matrix and jacobian
     ŷ, R, H = h(t, nav.x)
 
@@ -160,7 +160,7 @@ function kalmanUpdateError!(nav::NavStateEKF, t, y, h)
     δz = zero(y)
 
     # Perform kalman update
-    isRejected = kalmanUpdateError!(nav, y, ŷ, R, H, δy, δz)
+    isRejected = kalmanUpdateError!(nav, y, ŷ, R, H, δy, δz; nReject=nReject)
 
     # Return results
     return δy, δz, isRejected
@@ -168,12 +168,12 @@ end
 
 # Scalar measurement update for EKF
 # The following function can be directly used when R is a diagonal matrix
-function kalmanUpdateErrorScalar!(nav::NavStateEKF, t, y, h)
+function kalmanUpdateErrorScalar!(nav::NavStateEKF, t, y, h; nReject::Int=6)
     ŷ, R, H = h(t, nav.x)
     δy = zero(y)
     δz = zero(y)
 
-    isRejected = kalmanUpdateErrorScalar!(nav, y, ŷ, R, H, δy, δz)
+    isRejected = kalmanUpdateErrorScalar!(nav, y, ŷ, R, H, δy, δz; nReject=nReject)
 
     return δy, δz, isRejected
 end
@@ -189,7 +189,8 @@ function kalmanUpdateError!(
     δy=zero(y),                                                       # Save allocations
     δz=zero(y),                                                       # Save allocations
     Pxy=Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)),              # Save allocations
-    Pyy=Matrix{eltype(nav.P)}(undef, size(R)),                        # Save allocations
+    Pyy=Matrix{eltype(nav.P)}(undef, size(R));                        # Save allocations
+    nReject::Int=6
 )
 
     ns = nav.ns
@@ -213,7 +214,7 @@ function kalmanUpdateError!(
         δz[i] = δy[i] / sqrt(Pyy[i, i])
 
         # Check rejection threshold
-        abs(δz[i]) > nav.σᵣ && return true
+        abs(δz[i]) > nReject && return true
     end
 
     # Update error state and covariance matrix
@@ -263,7 +264,8 @@ function kalmanUpdateErrorScalar!(
     R,
     H,
     δy=zero(y),                 # Save allocations
-    δz=zero(y),                 # Save allocations
+    δz=zero(y);                 # Save allocations
+    nReject::Int=6
 )
     # Extract data from nav
     Pxy = nav.pxy
@@ -297,7 +299,7 @@ function kalmanUpdateErrorScalar!(
         # Measurement editing
         δy[i] = y[i] - (ŷ[i] + Hδx)
         δz[i] = δy[i] / sqrt(Pyy)                   # Normalized innovation
-        abs(δz[i]) > nav.σᵣ && return true          # σ rejection threshold
+        abs(δz[i]) > nReject && return true         # σ rejection threshold
 
         # Update error state and covariance matrix
         @inbounds for j in 1:ns
@@ -332,9 +334,7 @@ function kalmanUpdateErrorScalar!(
 end
 
 # This update routine implements an IEKF
-@views function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter)
-    iter == 0 && return kalmanUpdate!(nav, t, y, h)
-
+@views function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter::Int=3; nReject::Int=6)
     # Estimated measurement and jacobians
     ŷ, R, H = h(t, nav.x)
     Pxy = nav.P*H'
@@ -343,8 +343,8 @@ end
 
     # Measurement editing
     δy = y - ŷ
-    δz = δy ./ sqrt.(diag(Pyy))                   # Normalized innovation
-    isRejected = maximum(abs, δz) > nav.σᵣ     # σ rejection threshold
+    δz = δy ./ sqrt.(diag(Pyy))                 # Normalized innovation
+    isRejected = maximum(abs, δz) > nReject     # σ rejection threshold
 
     # Update error state and covariance matrix
     Ks = zeros(nav.ns, length(y))

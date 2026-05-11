@@ -16,9 +16,8 @@ function testalloc()
 
     Pxy = Matrix{eltype(nav.P)}(undef, nav.nδ, length(y))              # Save allocations
     Pyy = Matrix{eltype(nav.P)}(undef, size(R))                        # Save allocations
-    PyyK = Matrix{eltype(nav.P)}(undef, length(y), nav.ns)             # Save allocations
 
-    @btime kalmanUpdateError!($nav, $y, $yest, $R, $H, $δy, $δz, $Pxy, $Pyy, $PyyK)
+    @btime kalmanUpdateError!($nav, $y, $yest, $R, $H, $δy, $δz, $Pxy, $Pyy)
     return nothing
 end
 

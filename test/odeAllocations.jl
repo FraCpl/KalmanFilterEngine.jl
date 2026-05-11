@@ -11,7 +11,7 @@ function main()
     oc = KalmanFilterEngine.ODECache(x0)
     p = nothing
 
-    @btime KalmanFilterEngine.odeCore!($x0, $t0, $Δt, $f!, $Jf!, $p, $oc)
+    @btime KalmanFilterEngine.odeSolve!($x0, $t0, $Δt, $f!, $Jf!, $p, $oc)
     return nothing
 end
 main()

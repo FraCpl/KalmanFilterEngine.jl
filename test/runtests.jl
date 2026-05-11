@@ -78,7 +78,7 @@ function TEST_kalmanOde()
         dx[1:3] .= x[4:6]
         dx[4:6] = -μ/norm(x[1:3])^3*x[1:3]
     end
-    x = KalmanFilterEngine.odeCore!(x0, 0.0, Torb, f!, μ, oc; nSteps=ceil(Int, Torb/1.0))
+    x = KalmanFilterEngine.odeSolve!(x0, 0.0, Torb, f!, μ, oc; nSteps=ceil(Int, Torb/1.0))
 
     return norm(x[1:3] - x0[1:3]) < 1e-3
 end
@@ -97,14 +97,17 @@ function TEST_UDpropagate1()
 end
 
 function TEST_kalmanOdeSTM()
-    f(t, x) = [x[4:6]; zeros(3)]
-    Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
+
+    f!(dx, x, p, t) = @inbounds for i in 1:3; dx[i] = x[i+3]; end
+    Jf!(Fx, x, p, t) = @inbounds for i in 1:3; Fx[i, i+3] = 1.0; end
 
     t0 = 3.0
     x0 = [randn(3); randn(3)]
-    Φ0 = Matrix(1.0I, 6, 6)
     Δt = 3.760
-    @time x, Φ = KalmanFilterEngine.odeCore(t0, x0, Φ0, Δt, f, Jf; nSteps=1)
+    oc = KalmanFilterEngine.ODECache(x0)
+
+    x = copy(x0)
+    x, Φ = KalmanFilterEngine.odeSolve!(x, t0, Δt, f!, Jf!, nothing, oc; nSteps=1)
     xTrue = [x0[1:3] + x0[4:6]*Δt; x0[4:6]]
     ΦTrue = I + [zeros(3, 3) Δt*I; zeros(3, 6)]
 

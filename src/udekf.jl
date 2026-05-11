@@ -42,19 +42,19 @@ function UD!(U, D, P)
     D[end] = P[end]
     if abs(P[end]) > 1e-9
         @inbounds for i in 1:n
-            U[i, end] = P[i, end]/P[end]
+            U[i, end] = P[i, end] / P[end]
         end
     end
     @inbounds for j in (n - 1):-1:1
         D[j] = P[j, j]
         for k in (j + 1):n
-            D[j] -= D[k]*U[j, k]^2
+            D[j] -= D[k] * U[j, k]^2
         end
         if D[j] > 0.0
             @inbounds for i in (j - 1):-1:1
-                U[i, j] = P[i, j]/D[j]
+                U[i, j] = P[i, j] / D[j]
                 @inbounds for k in (j + 1):n
-                    U[i, j] -= D[k]*U[i, k]*U[j, k]/D[j]
+                    U[i, j] -= D[k] * U[i, k] * U[j, k] / D[j]
                 end
             end
         end
@@ -76,14 +76,14 @@ end
         Ũ = Matrix(1.0I, n, n)
         D̃ = zeros(n)
         @inbounds for j in n:-1:2
-            D̃[j] = D[j] + c*xx[j]^2
-            b = c/D̃[j]
-            v = b*xx[j]
+            D̃[j] = D[j] + c * xx[j]^2
+            b = c / D̃[j]
+            v = b * xx[j]
             @inbounds for i in 1:(j - 1)
-                xx[i] = xx[i] - U[i, j]*xx[j]
-                Ũ[i, j] = U[i, j] + xx[i]*v
+                xx[i] = xx[i] - U[i, j] * xx[j]
+                Ũ[i, j] = U[i, j] + xx[i] * v
             end
-            c = b*D[j]
+            c = b * D[j]
         end
         D̃[1] = D[1] + c*xx[1]^2
 

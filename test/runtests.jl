@@ -3,6 +3,8 @@ using KalmanFilterEngine
 using LinearAlgebra
 using Test
 
+include("testUpdate.jl")
+
 function TEST_UD()
     n = 12
     P = generatePosDefMatrix(n)
@@ -276,4 +278,6 @@ end
     @test TEST_simpleKalman(:UD) < ERR_TOL
     @test TEST_simpleKalman(:UKF) < 100*ERR_TOL
     @test TEST_simpleKalman(:SRUKF) < 100*ERR_TOL
+    @test testUpdate(true)
+    @test testUpdate(false)
 end

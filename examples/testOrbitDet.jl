@@ -68,7 +68,7 @@ function main(; showplot=true)
         kalmanFilter!(navUD, Δt, ty, y, Q)
         kalmanFilter!(navUKF, Δt, ty, y, Q)
         kalmanFilter!(navSRUKF, Δt, ty, y, Q)
-        kalmanFilter!(navIEKF, Δt, ty, y, Q, 6, 3)
+        kalmanFilter!(navIEKF, Δt, ty, y, Q, 3)
 
         # Propagate true dynamics from x[k] to x[k+1]
         KalmanFilterEngine.odeSolve!(x, 0.0, Δt, f!, 0, oc; nSteps=1)

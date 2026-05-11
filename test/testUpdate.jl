@@ -1,0 +1,51 @@
+using KalmanFilterEngine
+using LinearAlgebra
+
+function kalmanUpdateSimple(x, P, y, yEst, R, H, ns)
+    Pxy = P * H'
+    Pyy = R + H * Pxy
+    K = Pxy / Pyy
+    K[ns+1:end, :] .= 0
+    x = x + K * (y - yEst)
+    P = (I - K * H) * P * (I - K * H)' + K * R * K'
+    return x, P
+end
+
+# Reference: Algorithm 3.1 of Navigation Filter Best Practices
+function kalmanUpdateSimpleScalar(x, P, y, yEst, R, H, ns)
+    dx = zero(x)
+    for i in eachindex(y)
+        Pxy = P * H[i, :]
+        Pyy = R[i, i] + dot(H[i, :], Pxy)
+        K = Pxy / Pyy
+        K[ns+1:end] .= 0
+        dx += K * (y[i] - yEst[i] - H[i, :]' * dx)
+        P = (I - K * H[i, :]') * P * (I - K * H[i, :]')' + K * R[i, i] * K'
+    end
+    x .+= dx
+    return x, P
+end
+
+function testUpdate(scalarUpdate=false)
+    nx = 6; ns = 3
+    x0 = randn(nx)
+    P0 = generatePosDefMatrix(nx)
+    nav = NavState(0.0, x0, P0, ns)
+
+    ny = 3
+    y = randn(ny)
+    yEst = randn(ny)
+    H = randn(ny, nx)
+    R = generatePosDefMatrix(ny)
+
+    if scalarUpdate
+        kalmanUpdateScalar!(nav, y, yEst, R, H; nReject=1000)
+        xu, Pu = kalmanUpdateSimpleScalar(x0, P0, y, yEst, R, H, nav.ns)
+    else
+        kalmanUpdate!(nav, y, yEst, R, H; nReject=1000)
+        xu, Pu = kalmanUpdateSimple(x0, P0, y, yEst, R, H, nav.ns)
+    end
+
+    err = norm(xu - nav.x) + norm(Pu - nav.P)
+    return err < 1e-14
+end

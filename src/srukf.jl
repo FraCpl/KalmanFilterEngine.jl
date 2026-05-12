@@ -45,7 +45,7 @@ end
         odeSolve!(nav.X[i], nav.t, Δt, f!, p, nav.odeCache; nSteps=nSteps)
         nav.x .+= nav.X[i] .* nav.Wm[i]
     end
-    nav.t = nav.t + Δt
+    nav.t += Δt
 
     # Calculate covariance estimate
     M = zeros(nav.L, 2*nav.L)

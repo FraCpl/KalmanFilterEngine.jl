@@ -18,7 +18,7 @@ Build UKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
 function NavStateUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
-    L = size(x, 1)
+    L = length(x)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
     odeCache = ODECache(x, P)
     return NavStateUKF(t, x, P, ns, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)], odeCache)
@@ -51,30 +51,36 @@ end
 end
 
 function kalmanPropagate!(nav::NavStateUKF, Δt, f!, Jf!, p, Q; nSteps=1)
+    # Extract from nav
+    X = nav.X; x = nav.x; P = nav.P
+
     # Create sigma points
     computeSigmaPoints!(nav)
 
     # Propagate sigma points and compute mean state
-    fill!(nav.x, 0)
-    @inbounds for i in eachindex(nav.X)
-        odeSolve!(nav.X[i], nav.t, Δt, f!, p, nav.odeCache; nSteps=nSteps)
-        nav.x .+= nav.X[i] .* nav.Wm[i]
+    fill!(x, 0)
+    @inbounds for i in eachindex(X)
+        odeSolve!(X[i], nav.t, Δt, f!, p, nav.odeCache; nSteps=nSteps)
+        for j in eachindex(x)
+            x[j] += X[i][j] * nav.Wm[i]
+        end
     end
     nav.t = nav.t + Δt
 
     # Compute covariance estimate
     @inbounds for i in eachindex(Q)
-        nav.P[i] = Q[i]
+        P[i] = Q[i]
     end
     @inbounds for i in 1:(2 * nav.L + 1)
-        δX = nav.X[i] - nav.x
-        nav.P .+= nav.Wc[i] .* δX*δX'
+        δX = X[i]
+        δX .-= x
+        for r in 1:nav.L, c in 1:nav.L
+            P[r, c] += nav.Wc[i] * δX[r] * δX[c]
+        end
     end
 end
 
-@inline function kalmanPropagate!(nav::NavStateUKF, Δt, f, p, Q; nSteps=1)
-    kalmanPropagate!(nav, Δt, f, nothing, p, Q, nSteps=nSteps)
-end
+@inline kalmanPropagate!(nav::NavStateUKF, Δt, f, p, Q; nSteps=1) = kalmanPropagate!(nav, Δt, f, nothing, p, Q, nSteps=nSteps)
 
 @views function kalmanUpdate!(nav::NavStateUKF, t, y, h; nReject::Int=6)
     # Create sigma points

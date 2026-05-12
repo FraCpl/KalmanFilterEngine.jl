@@ -36,12 +36,13 @@ function testUpdate(scalarUpdate=false)
     y = randn(ny)
     yEst = randn(ny)
     H = randn(ny, nx)
-    R = generatePosDefMatrix(ny)
 
     if scalarUpdate
+        R = diagm(abs.(randn(ny)))
         kalmanUpdateScalar!(nav, y, yEst, R, H; nReject=1000)
         xu, Pu = kalmanUpdateSimpleScalar(x0, P0, y, yEst, R, H, nav.ns)
     else
+        R = generatePosDefMatrix(ny)
         kalmanUpdate!(nav, y, yEst, R, H; nReject=1000)
         xu, Pu = kalmanUpdateSimple(x0, P0, y, yEst, R, H, nav.ns)
     end

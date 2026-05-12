@@ -56,9 +56,11 @@ end
 # This function implements the covariance propagation formula
 # P[k+1] = ϕ*P[k]*ϕᵀ + Q
 function kalmanPropagateCov!(nav::NavStateEKF, Φ, Q)
-    tmp = nav.odeCache.P1
-    mul!(tmp, nav.P, transpose(Φ))
-    mul!(nav.P, Φ, tmp)
+    Φt = nav.odeCache.P2
+    PΦt = nav.odeCache.P1
+    transpose!(Φt, Φ)
+    mul!(PΦt, nav.P, Φt)
+    mul!(nav.P, Φ, PΦt)
     nav.P .+= Q
     return nav.P
 end
@@ -96,11 +98,15 @@ function kalmanUpdate!(nav::NavStateEKF, t, y, h; nReject::Int=6)
 end
 
 function kalmanUpdate!(nav::NavStateEKF, y, ŷ, R, H,
-    δy=zero(y), δz=zero(y), Pxy=Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)), Pyy=Matrix{eltype(nav.P)}(undef, size(R));     # Save allocations
+    δy=zero(y),
+    δz=zero(y),
+    Pxy=Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)),
+    Pyy=Matrix{eltype(nav.P)}(undef, size(R)),
+    K=Matrix{eltype(nav.P)}(undef, nav.nδ, length(y));     # Save allocations
     nReject::Int=6)
 
     nav.δx .= 0.0       # Better safe than sorry
-    isRejected = kalmanUpdateError!(nav, y, ŷ, R, H, δy, δz, Pxy, Pyy; nReject=nReject)
+    isRejected = kalmanUpdateError!(nav, y, ŷ, R, H, δy, δz, Pxy, Pyy, K; nReject=nReject)
     nav.x .+= nav.δx
     nav.δx .= 0.0       # reset error state
 
@@ -169,22 +175,25 @@ function kalmanUpdateError!(nav::NavStateEKF, y, ŷ, R, H,
     δy=zero(y),                                                       # Save allocations
     δz=zero(y),                                                       # Save allocations
     Pxy=Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)),              # Save allocations
-    Pyy=Matrix{eltype(nav.P)}(undef, size(R));                        # Save allocations
+    Pyy=Matrix{eltype(nav.P)}(undef, size(R)),                        # Save allocations
+    K=Matrix{eltype(nav.P)}(undef, nav.nδ, length(y));                # Save allocations (kalman gain)
     nReject::Int=6
 )
 
     ns = nav.ns
     nδ = nav.nδ
     ny = length(y)
+    δx = nav.δx
+    P = nav.P
 
     # Estimated measurement and jacobians
-    mul!(Pxy, nav.P, transpose(H))  # Pxy = P*Hᵀ
+    mul!(Pxy, P, transpose(H))      # Pxy = P*Hᵀ
     mul!(Pyy, H, Pxy)               # Pyy = H*P*Hᵀ + R
     Pyy .+= R
 
     # Measurement editing
     # δy := y - (ŷ + H*δx)
-    mul!(δy, H, nav.δx)     # This really is H*δx here
+    mul!(δy, H, δx)     # This really is H*δx here
     @inbounds for i in eachindex(y)
         # Check negative covariance (numerical issue)
         Pyy[i, i] ≤ 0 && return true
@@ -197,39 +206,36 @@ function kalmanUpdateError!(nav::NavStateEKF, y, ŷ, R, H,
         abs(δz[i]) > nReject && return true
     end
 
-    # Update error state and covariance matrix
     # Compute Kalman Gain
-    Ks = Pxy[1:nav.ns, :] / Pyy
-    mul!(nav.xs, Ks, δy)            # Error state correction
+    K .= Pxy
+    rdiv!(K, cholesky!(Hermitian(Pyy)))        # K = Pxy / Pyy, Caution: this modifies Pyy
+    # K = Pxy[1:nav.ns, :] / Pyy
 
-    @inbounds for i in 1:ns
-        # Update error state
-        nav.δx[i] += nav.xs[i]
+    # Update error state and covariance matrix (non-optimal gain with consider states)
+    @inbounds for i in 1:ns, j in 1:ny
+        # P[1:ns, 1:ns] .-= Ks * Pyy * Ks' = -Pxy * Ks'
+        # P[1:ns, (ns + 1):nδ] .-= Ks * Pyx
+        pij = Pxy[i, j]
+        kij = K[i, j]
 
-        # Covariance update (non-optimal gain with consider states)
-        # P[1:ns, 1:ns] .-= Ks * Pyy * Ks'
+        # Error state
+        δx[i] += kij * δy[j]
+
+        # Top left block: c = 1:ns
         for c in 1:ns
-            acc = 0.0
-            for k in 1:ny, l in 1:ny
-                acc += Ks[i, k] * Pyy[k, l] * Ks[c, l]
-            end
-            nav.P[i, c] -= acc
+            P[i, c] -= pij * K[c, j]
         end
 
-        # P[1:ns, (ns + 1):nδ] .-= Ks * Pyx
-        for c in (ns+1):nδ
-            acc = 0.0
-            for k in 1:ny
-                acc += Ks[i, k] * Pxy[c, k]
-            end
-            nav.P[i, c] -= acc
+        # Top right block: c = ns+1:nδ
+        for c in ns+1:nδ
+            P[i, c] -= kij * Pxy[c, j]
         end
     end
 
     # Make covariance matrix symmetric
     # P[ns+1:nδ, 1:ns] = P[1:ns, ns+1:nδ]'
     @inbounds for r in (ns + 1):nδ, c in 1:ns
-        nav.P[r, c] = nav.P[c, r]       # Make it symmmetric
+        P[r, c] = P[c, r]       # Make it symmmetric
     end
 
     return false

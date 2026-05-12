@@ -69,25 +69,47 @@ end
 # D must be provided as a vector.
 # c is a positive scalar.
 # x is a vector.
-@views function ageeTurnerUpdate(U, D, c, x)
+@views function ageeTurnerUpdate(U, D, c, x, xtmp=copy(x))
     if c > 0
-        xx = copy(x)
+        xtmp .= x
         n = length(D)
         Ũ = Matrix(1.0I, n, n)
         D̃ = zeros(n)
         @inbounds for j in n:-1:2
-            D̃[j] = D[j] + c * xx[j]^2
+            D̃[j] = D[j] + c * xtmp[j]^2
             b = c / D̃[j]
-            v = b * xx[j]
+            v = b * xtmp[j]
             @inbounds for i in 1:(j - 1)
-                xx[i] = xx[i] - U[i, j] * xx[j]
-                Ũ[i, j] = U[i, j] + xx[i] * v
+                xtmp[i] = xtmp[i] - U[i, j] * xtmp[j]
+                Ũ[i, j] = U[i, j] + xtmp[i] * v
             end
             c = b * D[j]
         end
-        D̃[1] = D[1] + c*xx[1]^2
+        D̃[1] = D[1] + c*xtmp[1]^2
 
         return Ũ, D̃
+    end
+
+    return U, D
+end
+
+# This updates directly U and D
+function ageeTurnerUpdate!(U, D, c, x, xtmp=copy(x))
+    if c > 0
+        xtmp .= x
+        n = length(D)
+        @inbounds for j in n:-1:2
+            Dj = D[j]
+            D[j] += c * xtmp[j]^2
+            b = c / D[j]
+            v = b * xtmp[j]
+            @inbounds for i in 1:(j - 1)
+                xtmp[i] = xtmp[i] - U[i, j] * xtmp[j]
+                U[i, j] += xtmp[i] * v
+            end
+            c = b * Dj
+        end
+        D[1] += c*xtmp[1]^2
     end
 
     return U, D
@@ -113,20 +135,50 @@ end
     end
     v = D̄ .* f
     K̄[1] = v[1]
-    αOld = R + v[1]*f[1]
-    D[1] = R/αOld*D̄[1]
+    αOld = R + v[1] * f[1]
+    D[1] = R / αOld * D̄[1]
 
     α = αOld
     @inbounds for i in 2:n
-        α = αOld + v[i]*f[i]
-        D[i] = αOld/α*D̄[i]
-        U[:, i] = Ū[:, i] - f[i]/αOld*K̄
-        K̄ = K̄ + v[i]*Ū[:, i]
+        α = αOld + v[i] * f[i]
+        D[i] = αOld / α * D̄[i]
+        U[:, i] = Ū[:, i] - f[i] / αOld * K̄
+        K̄ .+= v[i] * Ū[:, i]
         αOld = α
     end
-    K = K̄ ./ α     # Kopt
+    K̄ ./= α     # Kopt
 
-    return K, U, D, α
+    return K̄, U, D, α
+end
+
+# This updates directly Ū, D̄, and K̄
+function carlsonUpdate!(Ū, D̄, H, R, K̄=zero(D̄))
+    n = length(D̄)
+    K̄[1] = D̄[1] * H[1]
+    αOld = R +  K̄[1] * H[1]
+    D̄[1] *= R / αOld
+
+    α = αOld
+    @inbounds for i in 2:n
+        fi = 0.0
+        for k in 1:i
+            fi += Ū[k, i] * H[k]
+        end
+        vi =  D̄[i] * fi
+        α = αOld + vi * fi
+
+        for j in 1:n
+            Uold = Ū[j, i]
+            Ū[j, i] -= fi / αOld * K̄[j]
+            K̄[j] += vi * Uold
+        end
+
+        D̄[i] *= αOld / α
+        αOld = α
+    end
+    K̄ ./= α     # Kopt
+
+    return K̄, α
 end
 
 # Modified Weighted Gram-Schmidt Orthogonalisation Algorithm
@@ -181,9 +233,9 @@ end
     return Ū, D̄
 end
 
-function kalmanPropagate!(nav::NavStateUD, Δt, f!, Jf!, p, Q; nSteps=1)
+function kalmanPropagate!(nav::NavStateUD, Δt, f!, Jf!, p, Q; nSteps=1, nCorr=length(nav.x))
     _, Φ = odeSolve!(nav.x, nav.t, Δt, f!, Jf!, p, nav.odeCache; nSteps=nSteps)
-    nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, size(nav.x, 1))  # TODO: update nc: number of fully correlated states
+    nav.U, nav.D = UDpropagate(nav.U, nav.D, Φ, Q, nCorr)  # nCorr: number of fully correlated states
     nav.t += Δt
     return nothing
 end
@@ -211,16 +263,17 @@ function UDpropagate(U, D, Φ, Q, nc)
     Uxx = U[1:nc, 1:nc]
     Dxx = D[1:nc]
     Qxx = Q[1:nc, 1:nc]
-    if any(Qxx .!= 0.0)
+    if !all(iszero, Qxx)
         if isdiag(Qxx)
             # CASE 1: Diagonal Qxx
             # Noiseless propagation
             Ũxx, D̃xx = modGramSchmidtReduced(Φxx, Uxx, Dxx)
 
             # Add single noise components with ageeTurnerUpdate
+            x = zeros(nc)
             @inbounds for i in 1:nc
                 if Qxx[i, i] > 0
-                    x = zeros(nc);
+                    x .= 0
                     x[i] = 1.0
                     Ũxx, D̃xx = ageeTurnerUpdate(Ũxx, D̃xx, Qxx[i, i], x)
                 end
@@ -250,16 +303,16 @@ function UDpropagate(U, D, Φ, Q, nc)
     # Reference: C. L. Thornton, Triangular Covariance Factorizations for Kalman Filtering, 1976, page 61
     Qpp = diag(Q[(nc + 1):nδ, (nc + 1):nδ])
     M = diag(Φ[(nc + 1):nδ, (nc + 1):nδ])
-    Ū = copy(Ũ);
+    Ū = copy(Ũ)
     D̄ = copy(D̃)
     @inbounds for k in 1:np
         na = nc + k - 1
-        D̄[na + 1] = M[k]^2*D̃[na + 1] + Qpp[k]                   # d_up_b, Eq. (7.38)
-        α = M[k]*D̃[na + 1]/D̄[na + 1]                            # [Default]
+        D̄[na + 1] = M[k]^2 * D̃[na + 1] + Qpp[k]                   # d_up_b, Eq. (7.38)
+        α = M[k] * D̃[na + 1] / D̄[na + 1]                            # [Default]
         Ū[1:na, na + 1] = α .* Ũ[1:na, na + 1]                      # U_up_ab, Eq. (7.39)
         Ū[na + 1, (na + 2):nδ] = M[k] .* Ũ[na + 1, (na + 2):nδ]        # U_up_bc, Eq. (7.37)
         if Qpp[k] > 0
-            c = α*Qpp[k]/M[k]
+            c = α * Qpp[k] / M[k]
             Ū[1:na, 1:na], D̄[1:na] = ageeTurnerUpdate(Ū[1:na, 1:na], D̄[1:na], c, Ũ[1:na, na + 1])  # Eq. (7.40)
         end
     end
@@ -277,31 +330,33 @@ end
     end
 
     ny = length(y)
-    δy = zeros(ny);
+    δy = zeros(ny)
     δz = zeros(ny)
     nx = length(nav.D)
     isRejected = false
 
     @inbounds for i in 1:ny
-        W1 = H[i:i, :]*nav.U
-        Ph = W1*diagm(nav.D)*W1'
+        W1 = H[i, :]' * nav.U
+        Ph = W1 * diagm(nav.D) * W1'
 
         # Measurement Editing (innovation check)
-        δy[i] = y[i] - ŷ[i] - H[i, :]'*nav.δx
-        δz[i] = δy[i]/sqrt(Ph[1] + R[i, i])
+        δy[i] = y[i] - ŷ[i] - dot(H[i, :], nav.δx)
+        δz[i] = δy[i] / sqrt(Ph[1] + R[i, i])
         isRejected = abs(δz[i]) > nReject
 
         # Update the state and covariance estimates for non-optimal K
         # (to be used with consider and underweighted gain instead of the optimal formula: P = P - K*Pyy*K')
         if !isRejected
-            K, nav.U, nav.D, α = carlsonUpdate(nav.U, nav.D, H[i, :], R[i, i])  # Kopt
+            K, α = carlsonUpdate!(nav.U, nav.D, H[i, :], R[i, i])  # Kopt
 
             # Perform Agee-Turner rank-one update to account for consider states
             if nx > nav.ns
                 nav.U, nav.D = ageeTurnerUpdate(nav.U, nav.D, α, [zeros(nav.ns); K[(nav.ns + 1):nav.nδ]]);
             end
 
-            nav.δx[1:nav.ns] += K[1:nav.ns]*δy[i]
+            for j in 1:nav.ns
+                nav.δx[j] += K[j] * δy[i]
+            end
         end
     end
 

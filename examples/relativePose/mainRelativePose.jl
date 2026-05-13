@@ -38,12 +38,11 @@ function main(Nsim=1)
     axs = initRelativePosePlot()
 
     # Run Monte-Carlo
-    measFun = losMeas#posMeas
     navData = NavData(μ, n, Δt, 1e-3, 1e-4, 0.1, 0.1π/180, R_SC, posCS_C)
     trueData = NavData(μ, n, Δt, 1e-3, 1e-4, 0.1, 0.1π/180, R_SC, posCS_C)
 
     P₀ = diagm([4.5/3*ones(3); 0.03/3*ones(3); 17.19/3*π/180*ones(3); 3.44/3*π/180*ones(3); 20*ones(6); 0.15/3*ones(3)].^2)
-    R = measFun(navData, zeros(22), zeros(3), zeros(3, 3), zeros(3, 3))[2]
+    R = navData.meas.R
     Rdist = MvNormal(R)
     P₀dist = MvNormal(P₀)
 
@@ -74,13 +73,13 @@ function main(Nsim=1)
             # Generate measurement at t[k]
             y = []
             for pQF_Q in posQF_Q
-                yMeas, _, _ = measFun(trueData, x, pQF_Q, R_CI, R_IL)
+                yMeas = losMeas!(trueData, x, pQF_Q, R_CI, R_IL)
                 yMeas = yMeas + rand(Rdist)
                 push!(y, (yMeas=yMeas, posQF_Q=pQF_Q))
             end
 
             # Perform Kalman Filter step, i.e., update x̂[k] and propagate to x̂[k+1]
-            kalmanFilter!(nav, navData, y, R_CI, R_IL, measFun)
+            kalmanFilter!(nav, navData, y, R_CI, R_IL)
 
             # Propagate true dynamics from x[k] to x[k+1]
             KalmanFilterEngine.odeSolve!(x, 0, Δt, trueDyn!, trueData, nav.odeCache; nSteps=5)

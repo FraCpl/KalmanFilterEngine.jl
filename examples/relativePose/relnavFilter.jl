@@ -9,19 +9,12 @@ struct NavData
     mJ3::Matrix{Float64}
     JT_T::Matrix{Float64}
     invJT_T::Matrix{Float64}
-    dX::Vector{Float64}
     J::Matrix{Float64}
     Fw::Matrix{Float64}
     Q::Matrix{Float64}
     R_SC::Matrix{Float64}
     posCS_S::Vector{Float64}
-    ypos::Vector{Float64}
-    Hpos::Matrix{Float64}
-    Rpos::Matrix{Float64}
-    ylos::Vector{Float64}
-    Hlos::Matrix{Float64}
     Mlos::Matrix{Float64}
-    Rlos::Matrix{Float64}
     WIT_T::Matrix{Float64}
     tmp1::Vector{Float64}
     tmp2::Vector{Float64}
@@ -30,6 +23,7 @@ struct NavData
     tmp5::Matrix{Float64}
     tmp6::Matrix{Float64}
     tmp7::Matrix{Float64}
+    meas::NavMeasurementScalar
 end
 
 function NavData(μ, n, Δt, wv, wω, stdPos, stdLos, R_SC, posCS_C)
@@ -40,21 +34,16 @@ function NavData(μ, n, Δt, wv, wω, stdPos, stdLos, R_SC, posCS_C)
     mJ3 = zeros(3, 6)
     JT_T = zeros(3, 3)
     invJT_T = zeros(3, 3)
-    dX = zeros(22)
     J = zeros(21, 21)
     Fw = [zeros(3, 6); wv*I(3) zeros(3, 3); zeros(3, 6); zeros(3, 3) wω*I(3); zeros(9, 6)]
-    ypos = zeros(3)
-    Hpos = zeros(3, 21)
-    ylos = zeros(2)
-    Hlos = zeros(2, 21)
     Mlos = zeros(2, 3)
-    Rpos = stdPos^2*I(3)
-    Rlos = stdLos^2*I(2)
     Q = zeros(21, 21)
     posCS_S = R_SC * posCS_C
 
-    nd = NavData(μ, n, rT, Δt, qTmp, mJ1, mJ2, mJ3, JT_T, invJT_T, dX, J, Fw, Q, R_SC, posCS_S, ypos, Hpos, Rpos, ylos,
-        Hlos, Mlos, Rlos, zeros(3, 3), zeros(3), zeros(3), zeros(3), zeros(3, 3), zeros(3, 3), zeros(3, 3), zeros(3, 6))
+    meas = NavMeasurementScalar(21, 2; R=stdLos^2*Matrix(I(2)))
+
+    nd = NavData(μ, n, rT, Δt, qTmp, mJ1, mJ2, mJ3, JT_T, invJT_T, J, Fw, Q, R_SC, posCS_S,
+        Mlos, zeros(3, 3), zeros(3), zeros(3), zeros(3), zeros(3, 3), zeros(3, 3), zeros(3, 3), zeros(3, 6), meas)
 
     nd.Q .= navProcessNoise(nd)
     return nd
@@ -113,7 +102,6 @@ end
 function navDyn!(dX, X, navData::NavData, t)
     μ = navData.μ
     n = navData.n
-    # dX = navData.dX
     JT_T = navData.JT_T
     rT = navData.rT
 
@@ -229,11 +217,12 @@ end
 
 navProcessNoise(navData, x=zeros(22)) = computeQd(navDynJacobian(x, navData, 0.0), navData.Fw, I, navData.Δt)
 
-function losMeas(navData::NavData, X, posQF_Q, R_CI, R_IL)
-    posSF_S, _, Hpos = posMeas(navData, X, posQF_Q, R_CI, R_IL)
+function losMeas!(navData::NavData, X, posQF_Q, R_CI, R_IL)
+    meas = navData.meas
+    posSF_S, Hpos = posMeas(navData, X, posQF_Q, R_CI, R_IL)
     xSF_S, ySF_S, zSF_S = posSF_S
-    navData.ylos[1] = xSF_S / zSF_S
-    navData.ylos[2] = ySF_S / zSF_S
+    meas.y[1] = xSF_S / zSF_S
+    meas.y[2] = ySF_S / zSF_S
 
     # Compute jacobian
     Mlos = navData.Mlos
@@ -241,9 +230,8 @@ function losMeas(navData::NavData, X, posQF_Q, R_CI, R_IL)
     Mlos[1, 3] = -xSF_S/zSF_S^2
     Mlos[2, 2] = 1/zSF_S
     Mlos[2, 3] = -ySF_S/zSF_S^2
-    mul!(navData.Hlos, Mlos, Hpos)
-
-    return navData.ylos, navData.Rlos, navData.Hlos
+    mul!(meas.H, Mlos, Hpos)
+    return meas.y
 end
 
 function posMeas(navData::NavData, X, posQF_Q, R_CI, R_IL)
@@ -261,14 +249,11 @@ function posMeas(navData::NavData, X, posQF_Q, R_CI, R_IL)
     mul!(posTF_S, R_ST, posTF_Q)
     mul!(posTC_S, R_SL, posTC_L)
 
-    y = navData.ypos
-    @inbounds for i in eachindex(y)
-        y[i] = posTF_S[i] - navData.posCS_S[i] - posTC_S[i]
-    end
+    posSF_S = [posTF_S[i] - navData.posCS_S[i] - posTC_S[i] for i in 1:3]
 
     # Compute jacobian
     xTF_Q = navData.tmp4
-    H = navData.Hpos
+    H = zeros(3, 21)#navData.Hpos
     crossMat!(xTF_Q, posTF_Q)
     mul!(navData.tmp5, R_ST, xTF_Q)
     @inbounds for j in 1:3, i in 1:3
@@ -277,15 +262,15 @@ function posMeas(navData::NavData, X, posQF_Q, R_CI, R_IL)
         H[i, i+18] = R_ST[i, j]
     end
 
-    return y, navData.Rpos, H
+    return posSF_S, H
 end
 
 # Define Kalman filter
-function kalmanFilter!(navState, navData, y, R_CI, R_IL, measFun)
+function kalmanFilter!(navState, navData, y, R_CI, R_IL)
     # Update step at t[k-1] with y[k-1]
     for yk in y
-        h(t, x) = measFun(navData, x, yk.posQF_Q, R_CI, R_IL)
-        kalmanUpdateErrorScalar!(navState, 0.0, yk.yMeas, h)
+        losMeas!(navData, navState.x, yk.posQF_Q, R_CI, R_IL)
+        kalmanUpdateError!(navState, navData.meas, yk.yMeas)
     end
 
     # Update full state

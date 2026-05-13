@@ -1,16 +1,8 @@
 using KalmanFilterEngine, LinearAlgebra, Distributions, GLMakie
 
-function f!(dx, x, p, t)
-    dx[1] = x[4]
-    dx[2] = x[5]
-    dx[3] = x[6]
-end
-
-function Jf!(Fx, x, p, t)
-    @inbounds for i in 1:3
-        Fx[i, i+3] = 1.0
-    end
-end
+f!(dx, x, p, t) = @inbounds for i in 1:3; dx[i] = x[i+3]; end
+Jf!(Fx, x, p, t) = @inbounds for i in 1:3; Fx[i, i+3] = 1.0; end
+h!(meas, x) = @inbounds for i in 1:3; meas.y[i] = x[i]; end
 
 function main()
     # True state parameters & state transition matrix
@@ -21,9 +13,8 @@ function main()
     # Define navigation problem
     Q = diagm([1e-4*ones(3); 1e-3*ones(3)] .^ 2)   # Process noise covariance
     R = 0.0483*Matrix(I, 3, 3)                        # Measurement noise covariance
-    # f(t, x) = [x[4:6]; zeros(3)]                    # System dynamics
-    # Jf(t, x) = [zeros(3, 3) I; zeros(3, 6)]
-    h(t, x) = (x[1:3], R, [I zeros(3, 3)])          # Measurement equation
+    H = [I zeros(3, 3)]
+    meas = NavMeasurement(6, 3; R=R, H=H)
     Qrnd = MvNormal(Q)
     Rrnd = MvNormal(R)
 
@@ -43,8 +34,9 @@ function main()
         y = x[1:3] + rand(Rrnd)
 
         # Execute Kalman filter step
-        kalmanUpdate!(nav, 0.0, y, h)
-        kalmanPropagate!(nav, Δt, f!, Jf!, 0.0, Q)
+        h!(meas, nav.x)                             # Predict measurement
+        kalmanUpdate!(nav, meas, y)                 # Update Kalman
+        kalmanPropagate!(nav, Δt, f!, Jf!, 0.0, Q)  # Propagate Kalman
 
         # Simulate system dynamics
         x .= Φ*x + rand(Qrnd)

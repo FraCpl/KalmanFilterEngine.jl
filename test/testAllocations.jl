@@ -19,18 +19,17 @@ function testKalmanAllocs()
 
     R = 0.483*Matrix(I, 3, 3)
     y = H*x₀ + rand(MvNormal(R))     # Generate measurement
-    ŷ = H*nav.x
     p = nothing
-    δy = zeros(3)
-    δz = zeros(3)
-    Pxy = zeros(6, 3)
-    Pyy = zeros(3, 3)
-    K = zeros(6, 3)
+    meas = NavMeasurement(6, 3; H=H, R=R, nReject=1000)
+    measScalar = NavMeasurementScalar(6, 3; H=H, R=R, nReject=1000)
 
-    println("kalmanUpdateScalar!")
-    @btime kalmanUpdateScalar!($nav, $y, $ŷ, $R, $H, $δy, $δz; nReject=1000)
+    meas.y .= y .+ 1e-6.*randn.()
+    measScalar.y .= y .+ 1e-6.*randn.()
+
+    println("kalmanUpdate! (scalar)")
+    @btime kalmanUpdate!($nav, $measScalar, $y)
     println("kalmanUpdate!")
-    @btime kalmanUpdate!($nav, $y, $ŷ, $R, $H, $δy, $δz, $Pxy, $Pyy, $K; nReject=1000)
+    @btime kalmanUpdate!($nav, $meas, $y)
     println("kalmanPropagate!")
     @btime kalmanPropagate!($nav, $Δt, $f!, $Jf!, $p, $Q)
     return nothing

@@ -18,7 +18,7 @@ Build SRUKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
 function NavStateSRUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
-    S = cholesky(P).U.data
+    S = Matrix(cholesky(P).U)#.data
     L = size(x, 1)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
     odeCache = ODECache(x, P)
@@ -36,14 +36,20 @@ getCov(nav::NavStateSRUKF) = nav.S'*nav.S
 end
 
 @views function kalmanPropagate!(nav::NavStateSRUKF, Δt, f!, Jf, p, Q; nSteps=1)
+    # Extract from nav
+    X = nav.X; x = nav.x; P = nav.P
+
     # Create sigma points
     computeSigmaPoints!(nav)
 
     # Propagate sigma points
-    fill!(nav.x, 0)
-    @inbounds for i in eachindex(nav.X)
-        odeSolve!(nav.X[i], nav.t, Δt, f!, p, nav.odeCache; nSteps=nSteps)
-        nav.x .+= nav.X[i] .* nav.Wm[i]
+    fill!(x, 0)
+    @inbounds for i in eachindex(X)
+        Xi = X[i]
+        odeSolve!(Xi, nav.t, Δt, f!, p, nav.odeCache; nSteps=nSteps)
+        for j in eachindex(x)
+            x[j] += Xi[j] * nav.Wm[i]
+        end
     end
     nav.t += Δt
 
@@ -113,18 +119,16 @@ end
 # https://math.stackexchange.com/questions/4318420/how-does-cholupdate-work
 # https://en.wikipedia.org/wiki/Cholesky_decomposition
 # Caution: This modifies both S and x!
-@views function cholupdate!(S, x, signx=1.0)
+function cholupdate!(S, x, signx=1.0)
     n = length(x)
     @inbounds for k in 1:n
-        r = sqrt(S[k, k]^2 + signx*x[k]*x[k])
-        c = r/S[k, k]
-        s = x[k]/S[k, k]
+        r = sqrt(S[k, k]^2 + signx * x[k] * x[k])
+        c = r / S[k, k]
+        s = x[k] / S[k, k]
         S[k, k] = r
-        if k < n
-            @inbounds for j in (k + 1):n
-                S[k, j] = (S[k, j] + signx*s*x[j])/c
-                x[j] = c*x[j] - s*S[k, j]
-            end
+        for j in (k + 1):n
+            S[k, j] = (S[k, j] + signx * s * x[j]) / c
+            x[j] = c * x[j] - s * S[k, j]
         end
     end
 end

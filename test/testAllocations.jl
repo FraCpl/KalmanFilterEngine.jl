@@ -27,9 +27,9 @@ function testKalmanAllocs()
     measScalar.y .= y .+ 1e-6.*randn.()
 
     println("kalmanUpdate! (scalar)")
-    @btime kalmanUpdate!($nav, $measScalar, $y)
+    @btime kalmanUpdate!($nav, $y, $measScalar)
     println("kalmanUpdate!")
-    @btime kalmanUpdate!($nav, $meas, $y)
+    @btime kalmanUpdate!($nav, $y, $meas)
     println("kalmanPropagate!")
     @btime kalmanPropagate!($nav, $Δt, $f!, $Jf!, $p, $Q)
     return nothing
@@ -72,6 +72,30 @@ function testUDallocs()
     return nothing
 end
 
+function testSigmaUKFallocs()
+    P = generatePosDefMatrix(11)
+    x0 = randn(size(P, 1))
+    nav = NavState(0.0, x0, P; type=:UKF)
+    @btime KalmanFilterEngine.computeSigmaPoints!($nav)
+    return nothing
+end
+
+function testUKFpropAllocs()
+    f!(dx, x, p, t) = @inbounds for i in eachindex(dx); dx[i] = randn(); end
+    P = generatePosDefMatrix(11)
+    x0 = randn(size(P, 1))
+    nav = NavState(0.0, x0, P; type=:UKF)
+    Δt = 0.1
+    p = nothing
+    Q = generatePosDefMatrix(11)
+    @btime kalmanPropagate!($nav, $Δt, $f!, $p, $Q)
+    return nothing
+end
+
+
 testKalmanAllocs()
 testODEallocs()
 testUDallocs()
+
+testSigmaUKFallocs()
+testUKFpropAllocs()

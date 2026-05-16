@@ -6,8 +6,9 @@ mutable struct NavStateUKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}
     const γ::Float64            # UKF parameters
     const Wm::Vector{Float64}   # UKF parameters
     const Wc::Vector{Float64}   # UKF parameters
-    const L::Int64              # Length of state vector
+    const nx::Int64             # Length of state vector
     X::Vector{T}                # Sigma point states
+    S::Matrix{Float64}          # Sqrt matrix (avoid allocations)
     odeCache::ODECache
 end
 
@@ -21,19 +22,19 @@ function NavStateUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
     L = length(x)
     γ, Wm, Wc = UKFweights(L, α, β, κ)
     odeCache = ODECache(x, P)
-    return NavStateUKF(t, x, P, ns, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)], odeCache)
+    return NavStateUKF(t, x, P, ns, γ, Wm, Wc, L, [zero(x) for _ in 1:(2L + 1)], zeros(ns, ns), odeCache)
 end
 
 @inline function getCov(nav::NavStateUKF)
     return nav.P
 end
 
-function UKFweights(L, α=1e-3, β=2.0, κ=0.0)
+function UKFweights(L::Int, α=1e-3, β=2.0, κ=0.0)
     λ = α^2*(L + κ) - L
     γ = sqrt(L + λ)
 
-    Wm = 0.5/(L + λ)*ones(2*L+1)
-    Wm[1] = λ/(L + λ)
+    Wm = 0.5 / (L + λ) * ones(2*L+1)
+    Wm[1] = λ / (L + λ)
 
     Wc = copy(Wm)
     Wc[1] += (1.0 - α^2 + β)
@@ -41,18 +42,31 @@ function UKFweights(L, α=1e-3, β=2.0, κ=0.0)
     return γ, Wm, Wc
 end
 
-@inline function computeSigmaPoints!(nav::NavStateUKF)
-    S = sqrt(nav.P)
+function computeSigmaPoints!(nav::NavStateUKF)
+    nx = nav.nx
+    S = nav.S
+    S .= nav.P
+    S = cholesky!(Hermitian(S)).U    # S = sqrt(nav.P)
     nav.X[1] .= nav.x
-    @inbounds for i in 1:nav.L, j in 1:nav.L
-        nav.X[i + 1][j] = nav.x[j] + nav.γ*S[i, j]
-        nav.X[i + 1 + nav.L][j] = nav.x[j] - nav.γ*S[i, j]
+    @inbounds for i in 1:nx
+        X1 = nav.X[i+1]
+        X2 = nav.X[i+1+nx]
+        for j in 1:nx
+            X1[j] = nav.x[j] + nav.γ*S[i, j]
+            X2[j] = nav.x[j] - nav.γ*S[i, j]
+        end
     end
 end
 
-function kalmanPropagate!(nav::NavStateUKF, Δt, f!, Jf!, p, Q; nSteps=1)
+kalmanPropagate!(nav, Δt, f!, Jf!, p, Q; nSteps=1) = kalmanPropagate!(nav, Δt, f!, p, Q, nSteps=nSteps)
+
+function kalmanPropagate!(nav::NavStateUKF, Δt, f!, p, Q; nSteps=1)
     # Extract from nav
-    X = nav.X; x = nav.x; P = nav.P
+    X = nav.X
+    x = nav.x
+    P = nav.P
+    nx = nav.nx
+    oc = nav.odeCache
 
     # Create sigma points
     computeSigmaPoints!(nav)
@@ -60,62 +74,158 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f!, Jf!, p, Q; nSteps=1)
     # Propagate sigma points and compute mean state
     fill!(x, 0)
     @inbounds for i in eachindex(X)
-        odeSolve!(X[i], nav.t, Δt, f!, p, nav.odeCache; nSteps=nSteps)
-        for j in eachindex(x)
-            x[j] += X[i][j] * nav.Wm[i]
+        Xi = X[i]
+        odeSolve!(Xi, nav.t, Δt, f!, p, oc; nSteps=nSteps)
+        for j in 1:nx
+            x[j] += nav.Wm[i] * Xi[j]
         end
     end
-    nav.t = nav.t + Δt
+    nav.t += Δt
 
     # Compute covariance estimate
     @inbounds for i in eachindex(Q)
         P[i] = Q[i]
     end
-    @inbounds for i in 1:(2 * nav.L + 1)
+    @inbounds for i in 1:(2*nx+1)
         δX = X[i]
         δX .-= x
-        for r in 1:nav.L, c in 1:nav.L
-            P[r, c] += nav.Wc[i] * δX[r] * δX[c]
-        end
+        BLAS.ger!(nav.Wc[i], δX, δX, P)
     end
 end
 
-@inline kalmanPropagate!(nav::NavStateUKF, Δt, f, p, Q; nSteps=1) = kalmanPropagate!(nav, Δt, f, nothing, p, Q, nSteps=nSteps)
+# h!(meas, x, p, t), shall fill meas.y, meas.H (if EKF), and meas.R
+function kalmanUpdate!(nav::NavStateUKF, y, h!, meas::M=NavMeasurement(nav.nx, length(y)), p=nothing, t=nothing) where {M<:AbstractNavMeasurement}
+    # Init and extract variables
+    ny = length(y)
+    nx = nav.nx
+    ns = nav.ns
+    nX = 2*nx + 1
+    x = nav.x; X = nav.X; P = nav.P
+    δy = meas.δy; δz = meas.δz
+    Pxy = meas.Pxy; Pyy = meas.Pyy
+    K = meas.K
+    Ŷ = [zero(y) for _ in 1:nX]#meas.Y
+    nReject = meas.nReject
 
-@views function kalmanUpdate!(nav::NavStateUKF, t, y, h; nReject::Int=6)
     # Create sigma points
     computeSigmaPoints!(nav)
 
     # Compute mean estimated measurement
-    out = h.(t, nav.X)
-    Ŷ = getindex.(out, 1)
-    ŷ = sum(nav.Wm .* Ŷ)
+    @inbounds for i in 1:nX
+        h!(meas, X[i], p, t)
+        Ŷ[i] .= meas.y
+    end
+    ŷ = meas.y
+    ŷ .= 0
+    @inbounds for i in 1:nX
+        Ŷi = Ŷ[i]
+        for j in 1:ny
+            ŷ[j] += nav.Wm[i] * Ŷi[j]
+        end
+    end
 
     # Compute sigma statistics
-    Pxy = zeros(nav.L, length(ŷ))
-    Pyy = getindex.(out, 2)[1]   # R
-    @inbounds for i in 1:(2 * nav.L + 1)
-        δY = Ŷ[i] - ŷ
-        δX = nav.X[i] - nav.x
-        Pyy .+= nav.Wc[i] .* δY*δY'
-        Pxy .+= nav.Wc[i] .* δX*δY'
+    Pyy .= meas.R
+    Pxy .= 0
+    @inbounds for i in 1:nX
+        # Compute δY (this overwrites Ŷ[i] to reduce allocations)
+        δY = Ŷ[i]
+        for j in 1:ny
+            δY[j] -= ŷ[j]
+        end
+
+        # Compute δY  (this overwrites X[i] to reduce allocations)
+        δX = X[i]
+        for j in 1:nx
+            δX[j] -= x[j]
+        end
+
+        # BLAS rank-1 updates
+        Wci = nav.Wc[i]
+        BLAS.ger!(Wci, δY, δY, Pyy)
+        BLAS.ger!(Wci, δX, δY, Pxy)
     end
 
     # Measurement editing
-    δy = y - ŷ
-    δz = δy ./ sqrt.(diag(Pyy))                   # Normalized innovation
-    isRejected = maximum(abs, δz) > nReject     # σ rejection threshold
+    @inbounds for i in eachindex(y)
+        # Check negative covariance (numerical issue)
+        Pyy[i, i] ≤ 0 && return true
 
-    # Update error state and covariance matrix
-    if !isRejected
-        # Error state update
-        Ks = Pxy[1:nav.ns, :]/Pyy     # Kalman Gain
-        nav.x[1:nav.ns] .+= Ks*δy
+        # Innovation and normalized innovation
+        δy[i] = y[i] - ŷ[i]
+        δz[i] = δy[i] / sqrt(Pyy[i, i])
 
-        # Covariance update (non-optimal gain with consider states)
-        nav.P[1:nav.ns, :] .-= Ks*[Pyy*Ks' Pxy[(nav.ns + 1):nav.L, :]']
-        nav.P[(nav.ns + 1):nav.L, 1:nav.ns] = nav.P[1:nav.ns, (nav.ns + 1):nav.L]'
+        # Check rejection threshold
+        abs(δz[i]) > nReject && return true
     end
 
-    return δy, δz, isRejected
+    # Compute Kalman Gain
+    K .= Pxy
+    rdiv!(K, cholesky!(Hermitian(Pyy)))        # K = Pxy / Pyy, Caution: this modifies Pyy
+
+    # Update state and covariance matrix (non-optimal gain with consider states)
+    @inbounds for i in 1:ns, j in 1:ny
+        # P[1:ns, 1:ns] .-= Ks * Pyy * Ks' = -Pxy * Ks'
+        # P[1:ns, (ns + 1):nx] .-= Ks * Pyx
+        pij = Pxy[i, j]
+        kij = K[i, j]
+
+        # Update state
+        x[i] += kij * δy[j]
+
+        # Top left block: P[1:ns, 1:ns] (upper triangular only)
+        for c in i:ns
+            P[i, c] -= pij * K[c, j]
+        end
+
+        # Top right block: P[1:ns, (ns + 1):nδ]
+        for c in ns+1:nx
+            P[i, c] -= kij * Pxy[c, j]
+        end
+    end
+
+    # Make covariance matrix symmetric
+    # P[1:ns, 1:ns] (lower triangular only)
+    @inbounds for r in 2:ns, c in 1:r-1
+        P[r, c] = P[c, r]
+    end
+    # P[ns+1:nδ, 1:ns]
+    @inbounds for r in (ns + 1):nx, c in 1:ns
+        P[r, c] = P[c, r]
+    end
+
+    return false
+end
+
+# y = f(x, p)
+function unscentedTransform(f, x, Pxx, p=nothing)
+    nav = NavState(0.0, x, Pxx; type=:UKF)
+
+    # Extract from nav
+    y = f(x, p)
+    X = nav.X; Pyy = nav.P
+    Y = [zero(y) for _ in eachindex(X)]
+
+    # Create sigma points
+    computeSigmaPoints!(nav)
+
+    # Propagate sigma points and compute mean state
+    fill!(y, 0)
+    @inbounds for i in eachindex(X)
+        Yi = Y[i]
+        Yi .= f(X[i], p)
+        for j in eachindex(Yi)
+            y[j] += nav.Wm[i] * Yi[j]
+        end
+    end
+
+    # Compute covariance estimate
+    fill!(Pyy, 0)
+    @inbounds for i in 1:(2 * nav.nx + 1)
+        δY = Y[i]
+        δY .-= y
+        BLAS.ger!(nav.Wc[i], δY, δY, Pyy)
+    end
+
+    return y, Pyy
 end

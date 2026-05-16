@@ -42,8 +42,8 @@ number of RK4 steps to be performed when numerically integrating the system's
 dynamics. This function is only applicable to EKF and UDEKF.
 """
 function kalmanPropagate!(nav::NavStateEKF, Δt, f!, Jf!, p, Q; nSteps=1)
-    _, Φ = odeSolve!(nav.x, nav.t, Δt, f!, Jf!, p, nav.odeCache; nSteps=nSteps)
-    kalmanPropagateCov!(nav, Φ, Q)
+    odeSolve!(nav.x, nav.t, Δt, f!, Jf!, p, nav.odeCache; nSteps=nSteps)
+    kalmanPropagateCov!(nav, nav.odeCache.Φ, Q)
     nav.t += Δt
     return nothing
 end
@@ -51,39 +51,53 @@ end
 # This function implements the covariance propagation formula
 # P[k+1] = ϕ*P[k]*ϕᵀ + Q
 function kalmanPropagateCov!(nav::NavStateEKF, Φ, Q)
-    Φt = nav.odeCache.P2
-    PΦt = nav.odeCache.P1
-    transpose!(Φt, Φ)
-    mul!(PΦt, nav.P, Φt)
-    mul!(nav.P, Φ, PΦt)
+    transformCov!(nav, Φ)
     nav.P .+= Q
     return nav.P
 end
 
+# P' = A*P*Aᵀ, where size(A) == size(P)
+@inline function transformCov!(nav::NavStateEKF, A)
+    Aᵀ = nav.odeCache.P2
+    PAᵀ = nav.odeCache.P1
+    transpose!(Aᵀ, A)
+    mul!(PAᵀ, nav.P, Aᵀ)
+    mul!(nav.P, A, PAᵀ)
+    return nav.P
+end
 
 """
     kalmanUpdate!(nav, meas, y)
 
 Update state of the Kalman filter using the input measurement.
 """
-function kalmanUpdate!(nav::NavStateEKF, meas::M, y) where {M<:AbstractNavMeasurement}
+function kalmanUpdate!(nav::NavStateEKF, y, meas::M) where {M<:AbstractNavMeasurement}
     nav.δx .= 0.0       # Better safe than sorry
-    isRejected = kalmanUpdateError!(nav, meas, y)
+    isRejected = kalmanUpdateError!(nav, y, meas)
     nav.x .+= nav.δx
     nav.δx .= 0.0       # reset error state
     return isRejected
 end
 
+function kalmanUpdate!(nav::NavStateEKF, y, h!, meas::M=NavMeasurement(nav.nδ, length(y)), p=nothing, t=nothing) where {M<:AbstractNavMeasurement}
+    h!(meas, nav.x, p, t)
+    return kalmanUpdate!(nav, y, meas)
+end
+
+function kalmanUpdateError!(nav::NavStateEKF, y, h!, meas::M=NavMeasurement(nav.nδ, length(y)), p=nothing, t=nothing) where {M<:AbstractNavMeasurement}
+    h!(meas, nav.x, p, t)
+    return kalmanUpdateError!(nav, y, meas)
+end
 
 """
-    kalmanUpdateError!(nav, meas, y)
+    kalmanUpdateError!(nav, y, meas)
 
 Update error state of the Kalman filter using the input measurement.
 This function is only applicable to EKF and UDEKF.
 """
 # Returns an 'isRejected' flag.
 # Recursive Implementations of the Schmidt-Kalman Consider Filter (Zanetti, D'Souza)
-function kalmanUpdateError!(nav::NavStateEKF, meas::NavMeasurement, y)
+function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurement)
 
     # Extract data from nav and meas
     ŷ = meas.y
@@ -125,7 +139,6 @@ function kalmanUpdateError!(nav::NavStateEKF, meas::NavMeasurement, y)
     # Compute Kalman Gain
     K .= Pxy
     rdiv!(K, cholesky!(Hermitian(Pyy)))        # K = Pxy / Pyy, Caution: this modifies Pyy
-    # K = Pxy[1:nav.ns, :] / Pyy
 
     # Update error state and covariance matrix (non-optimal gain with consider states)
     @inbounds for i in 1:ns, j in 1:ny
@@ -137,21 +150,25 @@ function kalmanUpdateError!(nav::NavStateEKF, meas::NavMeasurement, y)
         # Error state
         δx[i] += kij * δy[j]
 
-        # Top left block: c = 1:ns
-        for c in 1:ns
+        # Top left block: P[1:ns, 1:ns] (upper triangular only)
+        for c in i:ns
             P[i, c] -= pij * K[c, j]
         end
 
-        # Top right block: c = ns+1:nδ
+        # Top right block: P[1:ns, (ns + 1):nδ]
         for c in ns+1:nδ
             P[i, c] -= kij * Pxy[c, j]
         end
     end
 
     # Make covariance matrix symmetric
-    # P[ns+1:nδ, 1:ns] = P[1:ns, ns+1:nδ]'
+    # P[1:ns, 1:ns] (lower triangular only)
+    @inbounds for r in 2:ns, c in 1:r-1
+        P[r, c] = P[c, r]
+    end
+    # P[ns+1:nδ, 1:ns]
     @inbounds for r in (ns + 1):nδ, c in 1:ns
-        P[r, c] = P[c, r]       # Make it symmmetric
+        P[r, c] = P[c, r]
     end
 
     return false
@@ -159,7 +176,7 @@ end
 
 # The following function can be directly used when R is a diagonal matrix
 # Returns an 'isRejected' flag.
-function kalmanUpdateError!(nav::NavStateEKF, meas::NavMeasurementScalar, y)
+function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurementScalar)
 
     # Extract data from nav and meas
     ŷ = meas.y
@@ -216,15 +233,10 @@ function kalmanUpdateError!(nav::NavStateEKF, meas::NavMeasurementScalar, y)
             # P[1:ns, 1:ns] -= Ks * Pyy * Ks'
             # P[1:ns, ns+1:nδ] -= Ks * Pxy[ns+1:nδ, :]'
             # For 1:ns 1:ns terms: # Kj * Pyy * Kc = Kj * Pyy * Pxy[c] / Pyy = Kj * Pxy[c]
-            for c in 1:nδ
+            for c in j:nδ
                 P[j, c] -= Kj * Pxy[c]
+                P[c, j] = P[j, c]           # Make covariance matrix symmetric
             end
-        end
-
-        # Make covariance matrix symmetric
-        # P[ns+1:nδ, 1:ns] = P[1:ns, ns+1:nδ]'
-        @inbounds for r in (ns + 1):nδ, c in 1:ns
-            P[r, c] = P[c, r]
         end
     end
 
@@ -239,7 +251,7 @@ end
     # ns = nav.ns
     # nδ = nav.nδ
     ny = length(y)
-    xIter = zero(nav.x)
+    xIter = nav.odeCache.K1
 
     # Call function for first time
     ŷ, R, H = h(t, nav.x)

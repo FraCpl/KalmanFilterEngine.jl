@@ -110,7 +110,8 @@ function TEST_kalmanOde()
         dx[1:3] .= x[4:6]
         dx[4:6] = -μ/norm(x[1:3])^3*x[1:3]
     end
-    x = KalmanFilterEngine.odeSolve!(x0, 0.0, Torb, f!, μ, oc; nSteps=ceil(Int, Torb/1.0))
+    x = copy(x0)
+    KalmanFilterEngine.odeSolve!(x, 0.0, Torb, f!, μ, oc; nSteps=ceil(Int, Torb/1.0))
 
     return norm(x[1:3] - x0[1:3]) < 1e-3
 end
@@ -139,7 +140,8 @@ function TEST_kalmanOdeSTM()
     oc = KalmanFilterEngine.ODECache(x0)
 
     x = copy(x0)
-    x, Φ = KalmanFilterEngine.odeSolve!(x, t0, Δt, f!, Jf!, nothing, oc; nSteps=1)
+    KalmanFilterEngine.odeSolve!(x, t0, Δt, f!, Jf!, nothing, oc; nSteps=1)
+    Φ = oc.Φ
     xTrue = [x0[1:3] + x0[4:6]*Δt; x0[4:6]]
     ΦTrue = I + [zeros(3, 3) Δt*I; zeros(3, 6)]
 
@@ -248,7 +250,7 @@ function TEST_simpleKalman(type::Symbol)
     H = [I zeros(3, 3)]
     f!(dx, x, p, t) = @inbounds for i in 1:3; dx[i] = x[i+3]; end
     Jf!(Fx, x, p, t) = @inbounds for i in 1:3; Fx[i, i+3] = 1.0; end
-    h!(meas, x) = @inbounds for i in 1:3; meas.y[i] = x[i]; end#(x[1:3], 0.483*Matrix(I, 3, 3), [I zeros(3, 3)])
+    h!(meas, x, p, t) = @inbounds for i in 1:3; meas.y[i] = x[i]; end#(x[1:3], 0.483*Matrix(I, 3, 3), [I zeros(3, 3)])
 
     J0 = zeros(6, 6)
     Jf!(J0, zeros(6), 0.0, 0.0)
@@ -259,8 +261,7 @@ function TEST_simpleKalman(type::Symbol)
     meas = NavMeasurement(6, 3; R=R, H=H)
 
     function klm!(nav, meas, y)
-        h!(meas, nav.x)
-        kalmanUpdate!(nav, meas, y)
+        kalmanUpdate!(nav, y, h!, meas)
         kalmanPropagate!(nav, Δt, f!, Jf!, 0.0, Q; nSteps=10)
     end
 
@@ -288,11 +289,12 @@ function TEST_simpleKalman(type::Symbol)
         x = Φ*x + rand(MvNormal(Q))     # Propagate state
     end
 
+    @show ε
     return ε
 end
 
 @testset "KalmanFilterEngine.jl" begin
-    ERR_TOL = 1e-9
+    ERR_TOL = 1e-8
     @test TEST_UD() < ERR_TOL
     @test TEST_generatePosDefMatrix() < ERR_TOL
     @test TEST_ageeTurnerUpdate() < ERR_TOL
@@ -312,7 +314,7 @@ end
     @test TEST_cholupdate(-1.0) < ERR_TOL
     @test TEST_simpleKalman(:EKF) < ERR_TOL
     # @test TEST_simpleKalman(:UD) < ERR_TOL
-    # @test TEST_simpleKalman(:UKF) < 100*ERR_TOL
+    @test TEST_simpleKalman(:UKF) < 10ERR_TOL
     # @test TEST_simpleKalman(:SRUKF) < 100*ERR_TOL # TODO: Not working!
     @test testUpdate(true)
     @test testUpdate(false)

@@ -36,7 +36,7 @@ function odeSolve!(x, t, Δt, f!, p, odeCache::ODECache; nSteps=1)
         t += h
         @. x += h / 8 * (K1 + 3 * K2 + 3 * K3 + K4)
     end
-    return x
+    return nothing
 end
 
 # f!(dx, x, p, t)       dx/dt = f(t, x)
@@ -81,5 +81,5 @@ function odeSolve!(x, t, Δt, f!, Jf!, p, odeCache::ODECache; nSteps=1)
         @. x += h / 8 * (K1 + 3 * K2 + 3 * K3 + K4)
         @. Φ += h / 8 * (P1 + 3 * P2 + 3 * P3 + P4)
     end
-    return x, Φ
+    return nothing
 end

@@ -38,15 +38,15 @@ function testUpdate(scalarUpdate=false)
     if scalarUpdate
         meas = NavMeasurementScalar(nx, ny; H=randn(ny, nx), R=diagm(abs.(randn(ny))), nReject=1000)
         meas.y .= randn(ny)
-        kalmanUpdate!(nav, meas, y)
+        kalmanUpdate!(nav, y, meas)
         xu, Pu = kalmanUpdateSimpleScalar(x0, P0, y, meas.y, meas.R, meas.H, nav.ns)
     else
         meas = NavMeasurement(nx, ny; H=randn(ny, nx), R=generatePosDefMatrix(ny), nReject=1000)
         meas.y .= randn(ny)
-        kalmanUpdate!(nav, meas, y)
+        kalmanUpdate!(nav, y, meas)
         xu, Pu = kalmanUpdateSimple(x0, P0, y, meas.y, meas.R, meas.H, nav.ns)
     end
 
-    err = norm(xu - nav.x) + norm(Pu - nav.P)
+    @show err = norm(xu - nav.x) + norm(Pu - nav.P)
     return err < 1e-14
 end

@@ -9,7 +9,7 @@ mutable struct NavStateUKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}
     const nx::Int64             # Length of state vector
     X::Vector{T}                # Sigma point states
     S::Matrix{Float64}          # Sqrt matrix (avoid allocations)
-    odeCache::ODECache
+    odeCache::ODECache{T, M}
 end
 
 """
@@ -44,16 +44,20 @@ end
 
 function computeSigmaPoints!(nav::NavStateUKF)
     nx = nav.nx
+    γ = nav.γ
+    x = nav.x
+    X = nav.X
     S = nav.S
+
     S .= nav.P
     S = cholesky!(Hermitian(S)).U    # S = sqrt(nav.P)
-    nav.X[1] .= nav.x
+    X[1] .= x
     @inbounds for i in 1:nx
-        X1 = nav.X[i+1]
-        X2 = nav.X[i+1+nx]
+        X1 = X[i+1]
+        X2 = X[i+1+nx]
         for j in 1:nx
-            X1[j] = nav.x[j] + nav.γ*S[i, j]
-            X2[j] = nav.x[j] - nav.γ*S[i, j]
+            X1[j] = x[j] + γ*S[i, j]
+            X2[j] = x[j] - γ*S[i, j]
         end
     end
 end
@@ -94,17 +98,21 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f!, p, Q; nSteps=1)
 end
 
 # h!(meas, x, p, t), shall fill meas.y, meas.H (if EKF), and meas.R
-function kalmanUpdate!(nav::NavStateUKF, y, h!, meas::M=NavMeasurement(nav.nx, length(y)), p=nothing, t=nothing) where {M<:AbstractNavMeasurement}
+function kalmanUpdate!(nav::NavStateUKF, y, h!, meas::NavMeasurement=NavMeasurement(nav.nx, length(y)), p=nothing, t=nothing)
     # Init and extract variables
     ny = length(y)
     nx = nav.nx
     ns = nav.ns
     nX = 2*nx + 1
-    x = nav.x; X = nav.X; P = nav.P
-    δy = meas.δy; δz = meas.δz
-    Pxy = meas.Pxy; Pyy = meas.Pyy
+    x = nav.x
+    X = nav.X
+    P = nav.P
+    δy = meas.δy
+    δz = meas.δz
+    Pxy = meas.Pxy
+    Pyy = meas.Pyy
     K = meas.K
-    Ŷ = [zero(y) for _ in 1:nX]#meas.Y
+    Ŷ = meas.Y
     nReject = meas.nReject
 
     # Create sigma points
@@ -116,7 +124,7 @@ function kalmanUpdate!(nav::NavStateUKF, y, h!, meas::M=NavMeasurement(nav.nx, l
         Ŷ[i] .= meas.y
     end
     ŷ = meas.y
-    ŷ .= 0
+    fill!(ŷ, 0)
     @inbounds for i in 1:nX
         Ŷi = Ŷ[i]
         for j in 1:ny
@@ -126,7 +134,7 @@ function kalmanUpdate!(nav::NavStateUKF, y, h!, meas::M=NavMeasurement(nav.nx, l
 
     # Compute sigma statistics
     Pyy .= meas.R
-    Pxy .= 0
+    fill!(Pxy, 0)
     @inbounds for i in 1:nX
         # Compute δY (this overwrites Ŷ[i] to reduce allocations)
         δY = Ŷ[i]
@@ -163,24 +171,24 @@ function kalmanUpdate!(nav::NavStateUKF, y, h!, meas::M=NavMeasurement(nav.nx, l
     K .= Pxy
     rdiv!(K, cholesky!(Hermitian(Pyy)))        # K = Pxy / Pyy, Caution: this modifies Pyy
 
-    # Update state and covariance matrix (non-optimal gain with consider states)
-    @inbounds for i in 1:ns, j in 1:ny
+    # Update error state and covariance matrix (non-optimal gain with consider states)
+    @inbounds for r in 1:ns, j in 1:ny
         # P[1:ns, 1:ns] .-= Ks * Pyy * Ks' = -Pxy * Ks'
-        # P[1:ns, (ns + 1):nx] .-= Ks * Pyx
-        pij = Pxy[i, j]
-        kij = K[i, j]
+        # P[1:ns, (ns + 1):nδ] .-= Ks * Pyx
+        pxy = Pxy[r, j]
+        k = K[r, j]
 
         # Update state
-        x[i] += kij * δy[j]
+        x[r] += k * δy[j]
 
         # Top left block: P[1:ns, 1:ns] (upper triangular only)
-        for c in i:ns
-            P[i, c] -= pij * K[c, j]
+        for c in r:ns
+            P[r, c] -= pxy * K[c, j]
         end
 
         # Top right block: P[1:ns, (ns + 1):nδ]
         for c in ns+1:nx
-            P[i, c] -= kij * Pxy[c, j]
+            P[r, c] -= k * Pxy[c, j]
         end
     end
 
@@ -203,7 +211,9 @@ function unscentedTransform(f, x, Pxx, p=nothing)
 
     # Extract from nav
     y = f(x, p)
-    X = nav.X; Pyy = nav.P
+    X = nav.X
+    ny = length(y)
+    Pyy = zeros(ny, ny)
     Y = [zero(y) for _ in eachindex(X)]
 
     # Create sigma points

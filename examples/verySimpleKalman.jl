@@ -35,7 +35,7 @@ function main()
 
         # Execute Kalman filter step
         h!(meas, nav.x)                             # Predict measurement
-        kalmanUpdate!(nav, meas, y)                 # Update Kalman
+        kalmanUpdate!(nav, y, meas)                 # Update Kalman
         kalmanPropagate!(nav, Δt, f!, Jf!, 0.0, Q)  # Propagate Kalman
 
         # Simulate system dynamics

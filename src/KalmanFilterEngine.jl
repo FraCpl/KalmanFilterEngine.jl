@@ -2,7 +2,7 @@
 # European Space Agency, 2024
 module KalmanFilterEngine
 
-using LinearAlgebra#, ForwardDiff
+using LinearAlgebra
 
 export generatePosDefMatrix, getStd, computeQd
 include("ode.jl")
@@ -15,6 +15,7 @@ export NavMeasurement, NavMeasurementScalar
 include("NavMeasurement.jl")
 include("NavState.jl")
 include("ekf.jl")
+include("iekf.jl")
 include("udekf.jl")
 include("ukf.jl")
 include("srukf.jl")

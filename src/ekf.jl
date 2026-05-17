@@ -5,7 +5,7 @@ mutable struct NavStateEKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}
     δx::D                   # Error state, δx[t]
     const ns::Int64         # Number of solve for (error) states
     const nδ::Int64         # Number of error states
-    odeCache::ODECache
+    odeCache::ODECache{T, M}
 end
 
 """
@@ -141,23 +141,23 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurement)
     rdiv!(K, cholesky!(Hermitian(Pyy)))        # K = Pxy / Pyy, Caution: this modifies Pyy
 
     # Update error state and covariance matrix (non-optimal gain with consider states)
-    @inbounds for i in 1:ns, j in 1:ny
+    @inbounds for r in 1:ns, j in 1:ny
         # P[1:ns, 1:ns] .-= Ks * Pyy * Ks' = -Pxy * Ks'
         # P[1:ns, (ns + 1):nδ] .-= Ks * Pyx
-        pij = Pxy[i, j]
-        kij = K[i, j]
+        pxy = Pxy[r, j]
+        k = K[r, j]
 
         # Error state
-        δx[i] += kij * δy[j]
+        δx[r] += k * δy[j]
 
         # Top left block: P[1:ns, 1:ns] (upper triangular only)
-        for c in i:ns
-            P[i, c] -= pij * K[c, j]
+        for c in r:ns
+            P[r, c] -= pxy * K[c, j]
         end
 
         # Top right block: P[1:ns, (ns + 1):nδ]
         for c in ns+1:nδ
-            P[i, c] -= kij * Pxy[c, j]
+            P[r, c] -= k * Pxy[c, j]
         end
     end
 
@@ -222,89 +222,23 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurementScalar)
 
         # Update error state and covariance matrix
         iPyy = 1 / Pyy
-        @inbounds for j in 1:ns
+        @inbounds for r in 1:ns
             # Kalman Gain
-            Kj = Pxy[j] * iPyy
+            K = Pxy[r] * iPyy
 
             # Error state update, δx = K * δy
-            δx[j] += Kj * δy[i]
+            δx[r] += K * δy[i]
 
             # Update covariance matrix (non-optimal gain with consider states)
             # P[1:ns, 1:ns] -= Ks * Pyy * Ks'
             # P[1:ns, ns+1:nδ] -= Ks * Pxy[ns+1:nδ, :]'
-            # For 1:ns 1:ns terms: # Kj * Pyy * Kc = Kj * Pyy * Pxy[c] / Pyy = Kj * Pxy[c]
-            for c in j:nδ
-                P[j, c] -= Kj * Pxy[c]
-                P[c, j] = P[j, c]           # Make covariance matrix symmetric
+            # For 1:ns 1:ns terms: # K * Pyy * Kc = K * Pyy * Pxy[c] / Pyy = K * Pxy[c]
+            for c in r:nδ
+                P[r, c] -= K * Pxy[c]
+                P[c, r] = P[r, c]           # Make covariance matrix symmetric
             end
         end
     end
 
     return false
-end
-
-# This update routine implements an IEKF
-# TODO: Fix, not super efficient
-@views function kalmanUpdateIter!(nav::NavStateEKF, t, y, h, iter::Int=3,
-    δy=zero(y), δz=zero(y), Pxy=Matrix{eltype(nav.P)}(undef, nav.nδ, length(y)), Pyy=Matrix{eltype(nav.P)}(undef, length(y), length(y)); nReject::Int=6)
-
-    # ns = nav.ns
-    # nδ = nav.nδ
-    ny = length(y)
-    xIter = nav.odeCache.K1
-
-    # Call function for first time
-    ŷ, R, H = h(t, nav.x)
-
-    # Estimated measurement and jacobians
-    mul!(Pxy, nav.P, transpose(H))  # Pxy = P*Hᵀ
-    mul!(Pyy, H, Pxy)               # Pyy = H*P*Hᵀ + R
-    Pyy .+= R
-
-    # Measurement editing
-    # δy := y - (ŷ + H*δx)
-    mul!(δy, H, nav.δx)     # This really is H*δx here
-    @inbounds for i in eachindex(y)
-        # Check negative covariance (numerical issue)
-        Pyy[i, i] ≤ 0 && return δy, δz, true
-
-        # Innovation and normalized innovation
-        δy[i] = y[i] - ŷ[i] - δy[i]     # Fix innovation definition wrt mul!()
-        δz[i] = δy[i] / sqrt(Pyy[i, i])
-
-        # Check rejection threshold
-        abs(δz[i]) > nReject && return δy, δz, true
-    end
-
-    # Update error state and covariance matrix
-    Ks = zeros(nav.ns, ny)
-    xIter .= nav.x
-
-    # Start iterations
-    @inbounds for i in 1:iter
-        if i > 1
-            ŷ, R, H = h(t, xIter)
-            mul!(Pxy, nav.P, transpose(H))
-            mul!(Pyy, H, Pxy)
-            Pyy .+= R
-        end
-
-        # State update
-        Ks .= Pxy[1:nav.ns, :] / Pyy    # Kalman Gain
-        xIter[1:nav.ns] .= nav.x[1:nav.ns] + Ks*(y - ŷ - H*(nav.x - xIter))
-    end
-
-    # Update state
-    nav.x .= xIter
-
-    # Covariance update (non-optimal gain with consider states)
-    nav.P[1:nav.ns, 1:nav.ns] .-= Ks*Pyy*Ks'
-    Kpyx = Ks * transpose(Pxy[(nav.ns + 1):nav.nδ, :])
-    # mul!(nav.KPyx, Ks, transpose(Pxy[(nav.ns + 1):nav.nδ, :]))    # KPyx = Ks*Pxyᵀ
-    nav.P[1:nav.ns, (nav.ns + 1):nav.nδ] .-= KPyx             # In-place subtraction
-    @inbounds for ir in (nav.ns + 1):nav.nδ, ic in 1:nav.ns
-        nav.P[ir, ic] = nav.P[ic, ir]       # Make it symmmetric
-    end
-
-    return δy, δz, false
 end

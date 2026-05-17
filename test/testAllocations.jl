@@ -6,6 +6,7 @@ using LinearAlgebra
 function testKalmanAllocs()
     f!(dx, x, p, t) = @inbounds for i in 1:3; dx[i] = x[i+3]; end
     Jf!(Fx, x, p, t) = @inbounds for i in 1:3; Fx[i, i+3] = 1.0; end
+    h!(meas, x, p, t) = @inbounds for i in 1:3; meas.y[i] = x[i]; end
 
     P₀ = generatePosDefMatrix(6)
     x₀ = zeros(6)
@@ -32,6 +33,8 @@ function testKalmanAllocs()
     @btime kalmanUpdate!($nav, $y, $meas)
     println("kalmanPropagate!")
     @btime kalmanPropagate!($nav, $Δt, $f!, $Jf!, $p, $Q)
+    println("kalmanUpdateIter!")
+    @btime kalmanUpdateIter!($nav, $y, $h!, $meas; iter=3)
     return nothing
 end
 
@@ -57,25 +60,29 @@ function testUDallocs()
     P = generatePosDefMatrix(12)
     U = zero(P)
     D = zeros(n)
+    println("UD!")
     @btime KalmanFilterEngine.UD!($U, $D, $P)
 
     KalmanFilterEngine.UD!(U, D, P)
     c = abs(randn())
     x = randn(n)
     xtmp = randn(n)
+    println("ageeTurnerUpdate!")
     @btime KalmanFilterEngine.ageeTurnerUpdate!($U, $D, $c, $x, $xtmp)
 
     H = randn(n)
     R = abs(randn())
     K = randn(n)
+    println("carlsonUpdate!")
     @btime KalmanFilterEngine.carlsonUpdate!($U, $D, $H, $R, $K)
     return nothing
 end
 
-function testSigmaUKFallocs()
+function testUKFsigmaAllocs()
     P = generatePosDefMatrix(11)
     x0 = randn(size(P, 1))
     nav = NavState(0.0, x0, P; type=:UKF)
+    println("computeSigmaPoints! (UKF)")
     @btime KalmanFilterEngine.computeSigmaPoints!($nav)
     return nothing
 end
@@ -88,7 +95,25 @@ function testUKFpropAllocs()
     Δt = 0.1
     p = nothing
     Q = generatePosDefMatrix(11)
+    println("kalmanPropagate! (UKF)")
     @btime kalmanPropagate!($nav, $Δt, $f!, $p, $Q)
+    return nothing
+end
+
+function testUKFupdateAllocs()
+    P0 = generatePosDefMatrix(6)
+    x0 = randn(size(P0, 1))
+
+    nav = NavState(0.0, x0, P0; type=:UKF)
+
+    R = 0.483*Matrix(I, 3, 3)
+    y = x0[1:3] + rand(MvNormal(R))     # Generate measurement
+    p = nothing
+    meas = NavMeasurement(6, 3; R=R, nReject=1000)
+    h!(meas, x, p, t) = @inbounds for i in 1:3; meas.y[i] = x[i]; end
+
+    println("kalmanUpdate! (UKF)")
+    @btime kalmanUpdate!($nav, $y, $h!, $meas)
     return nothing
 end
 
@@ -97,5 +122,6 @@ testKalmanAllocs()
 testODEallocs()
 testUDallocs()
 
-testSigmaUKFallocs()
+testUKFsigmaAllocs()
 testUKFpropAllocs()
+testUKFupdateAllocs()

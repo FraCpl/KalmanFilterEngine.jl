@@ -1,7 +1,6 @@
 using BenchmarkTools
 using DifferentialEquations
 using Distributions
-# using ForwardDiff
 using KalmanFilterEngine
 using LinearAlgebra
 using GLMakie
@@ -15,11 +14,11 @@ h!(meas, x, p, t) = @inbounds for i in 1:3; meas.y[i] = x[i]; end
 
 # Define Kalman filter
 function kalmanFilter!(nav, meas, Δt, y, Q, iter=0)
-    # if iter == 0
-    kalmanUpdate!(nav, y, h!, meas)     # Update step at t[k-1] with y[k-1]
-    # else
-    #     kalmanUpdateIter!(nav, ty, y, h, iter)
-    # end                                 # Update step at t[k-1] with y[k-1]
+    if iter == 0
+        kalmanUpdate!(nav, y, h!, meas)     # Update step at t[k-1] with y[k-1]
+    else
+        kalmanUpdateIter!(nav, y, h!, meas; iter=iter)
+    end                                 # Update step at t[k-1] with y[k-1]
 
     # hasfield(typeof(nav), :P) && nav.P = 0.5(nav.P + nav.P')       # Sym P
     kalmanPropagate!(nav, Δt, f!, Jf!, 0, Q; nSteps=ceil(Int, Δt/10.0))    # Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
@@ -70,10 +69,10 @@ function main(; showplot=true)
         # kalmanFilter!(navUD, Δt, ty, y, Q)
         kalmanFilter!(navUKF, meas, Δt, y, Q)
         # kalmanFilter!(navSRUKF, Δt, ty, y, Q)
-        # kalmanFilter!(navIEKF, Δt, ty, y, Q, 3)
+        kalmanFilter!(navIEKF, meas, Δt, y, Q, 1)
 
         # Propagate true dynamics from x[k] to x[k+1]
-        KalmanFilterEngine.odeSolve!(x, 0.0, Δt, f!, 0, oc; nSteps=1)
+        KalmanFilterEngine.odeSolve!(x, 0.0, Δt, f!, 0, oc; nSteps=3)
         x .+= rand(Qrnd)
 
         # Save data for post-processing
@@ -116,7 +115,7 @@ function main(; showplot=true)
             # plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ud, i), getindex.(σud, i); color=:red)
             plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ukf, i), getindex.(σukf, i); color=:green, linestyle=:dash)
             # plotnav(axs[i], T, getindex.(X, i), getindex.(X̂srukf, i), getindex.(σsrukf, i); color=:orange)
-            # plotnav(axs[i], T, getindex.(X, i), getindex.(X̂iekf, i), getindex.(σiekf, i); color=:magenta)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂iekf, i), getindex.(σiekf, i); color=:magenta)
         end
         display(fig)
     end

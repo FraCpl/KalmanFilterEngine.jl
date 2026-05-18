@@ -30,7 +30,7 @@ function testUpdate(scalarUpdate=false)
     nx = 6; ns = 3
     x0 = randn(nx)
     P0 = generatePosDefMatrix(nx)
-    nav = NavState(0.0, x0, P0, ns)
+    nav = NavState(0.0, x0, P0, ns=ns)
 
     ny = 3
     y = randn(ny)

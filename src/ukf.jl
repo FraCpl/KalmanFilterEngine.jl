@@ -80,8 +80,9 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f!, p, Q; nSteps=1)
     @inbounds for i in eachindex(X)
         Xi = X[i]
         odeSolve!(Xi, nav.t, Δt, f!, p, oc; nSteps=nSteps)
+        Wmi = nav.Wm[i]
         for j in 1:nx
-            x[j] += nav.Wm[i] * Xi[j]
+            x[j] += Wmi * Xi[j]
         end
     end
     nav.t += Δt

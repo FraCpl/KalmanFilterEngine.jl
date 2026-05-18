@@ -17,6 +17,7 @@ Build UDEKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
 function NavStateUD(t, x, P, ns=size(P, 1))
+    # @warning "WORK-IN-PROGRESS: might not work!"
     U, D = UD(P)
     nδ = size(U, 1)
     odeCache = ODECache(x, P)

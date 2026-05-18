@@ -88,7 +88,7 @@ function testUKFsigmaAllocs()
 end
 
 function testUKFpropAllocs()
-    f!(dx, x, p, t) = @inbounds for i in eachindex(dx); dx[i] = randn(); end
+    f!(dx, x, p, t) = @inbounds for i in eachindex(dx); dx[i] = 1.0; end
     P = generatePosDefMatrix(11)
     x0 = randn(size(P, 1))
     nav = NavState(0.0, x0, P; type=:UKF)
@@ -108,7 +108,6 @@ function testUKFupdateAllocs()
 
     R = 0.483*Matrix(I, 3, 3)
     y = x0[1:3] + rand(MvNormal(R))     # Generate measurement
-    p = nothing
     meas = NavMeasurement(6, 3; R=R, nReject=1000)
     h!(meas, x, p, t) = @inbounds for i in 1:3; meas.y[i] = x[i]; end
 

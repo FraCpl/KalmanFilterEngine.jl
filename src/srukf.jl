@@ -18,6 +18,7 @@ Build SRUKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
 """
 function NavStateSRUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
+    # @warning "WORK-IN-PROGRESS: might not work!"
     S = Matrix(cholesky(P).U)#.data
     nx = size(x, 1)
     γ, Wm, Wc = UKFweights(nx, α, β, κ)
@@ -27,7 +28,7 @@ end
 
 getCov(nav::NavStateSRUKF) = nav.S'*nav.S
 
-@views function computeSigmaPoints!(nav::NavStateSRUKF)
+function computeSigmaPoints!(nav::NavStateSRUKF)
     nx = nav.nx
     γ = nav.γ
     x = nav.x

@@ -79,7 +79,7 @@ function Jf!(Fx, x, p, t)
 end
 
 function kalmanFilter!(nav, Φ, Δt, meas, y, Q, p)
-    # UPDATE-OPT1: EKF
+    # # UPDATE-OPT1: EKF
     # kalmanUpdate!(nav, y, h!, meas, p)  # Update step at t[k-1] with y[k-1]
 
     # UPDATE-OPT2: IEKF
@@ -90,7 +90,7 @@ function kalmanFilter!(nav, Φ, Δt, meas, y, Q, p)
     kalmanPropagateCov!(nav, Φ, Q)
     nav.t += Δt
 
-    # PROP-OPT2: Continuous time non-linear propagation
+    # # PROP-OPT2: Continuous time non-linear propagation
     # kalmanPropagate!(nav, Δt, f!, Jf!, p, Q)        # Propagate state from t[k-1] to t[k]
 end
 

@@ -8,38 +8,8 @@ mutable struct NavStateEKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}
     odeCache::ODECache{T, M}
 end
 
-"""
-    NavStateEKF(t, x, P; ns)
-
-Build EKF navigation state given as input the initial time, estimated
-state and navigation covariance matrix.
-*ns: number of solve-for states, assumed to be located at x[1:ns]
-"""
-
-"""
-    NavStateEKF(t, x, P; ns=size(P, 1))
-
-Construct an Extended Kalman Filter (EKF) navigation state.
-
-# Arguments
-- `t`: Initial time.
-- `x::AbstractVector`: Initial state estimate.
-- `P::AbstractMatrix`: Initial state covariance matrix.
-
-# Keyword Arguments
-- `ns::Int=size(P,1)`: Number of *solve-for* (error) states.
-  These are assumed to correspond to `x[1:ns]`. The remaining
-  states (if any) are treated as cosider-states.
-
-# Example
-```julia
-x0 = zeros(6)
-P0 = Matrix{Float64}(I, 6, 6)
-
-nav = NavStateEKF(0.0, x0, P0; ns=6)
-"""
 function NavStateEKF(t, x, P, ns=size(P, 1))
-    nδ = size(P, 1)
+    nδ = size(P, 1)     # number of error states
     odeCache = ODECache(x, P)
     return NavStateEKF(t, x, P, zero(P[:, 1]), ns, nδ, odeCache)
 end
@@ -72,8 +42,31 @@ function kalmanPropagate!(nav::NavStateEKF, Δt, f!, Jf!, p, Q; nSteps=1)
     return nothing
 end
 
-# This function implements the covariance propagation formula
-# P[k+1] = ϕ*P[k]*ϕᵀ + Q
+
+"""
+    kalmanPropagateCov!(nav::NavStateEKF, Φ, Q)
+
+Propagate the state covariance matrix of an Extended Kalman Filter (EKF).
+
+This function implements the standard discrete-time covariance propagation:
+
+    Pₖ₊₁ = Φ * Pₖ * Φᵀ + Q
+
+where:
+- `Φ` is the state transition matrix between tₖ and tₖ₊₁,
+- `Pₖ` is the current covariance,
+- `Q` is the (discrete time) process noise covariance.
+
+# Arguments
+- `nav::NavStateEKF`: EKF navigation state (modified in-place).
+- `Φ`: State transition matrix.
+- `Q`: Process noise covariance matrix.
+
+# Notes
+- This function assumes `Φ` and `Q` are dimensionally consistent with `nav.P`.
+- Symmetry and positive-definiteness of `P` are not enforced explicitly;
+  ensure `Q` is positive semi-definite and `Φ` is well-conditioned.
+"""
 function kalmanPropagateCov!(nav::NavStateEKF, Φ, Q)
     transformCov!(nav, Φ)
     nav.P .+= Q

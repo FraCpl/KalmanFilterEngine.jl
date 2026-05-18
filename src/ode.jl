@@ -17,7 +17,7 @@ ODECache(x) = ODECache(x, x * x')
 
 # f!(dx, x, p, t)
 # x(t) -> x(t + Δt)
-function odeSolve!(x, t, Δt, f!, p, odeCache::ODECache; nSteps=1)
+function odeSolve!(x, t, Δt, f!, p, odeCache::ODECache{T, D}; nSteps=1) where {T, D}
     h = Δt / nSteps
     K1 = odeCache.K1; K2 = odeCache.K2; K3 = odeCache.K3;
     K4 = odeCache.K4; Ktmp = odeCache.Ktmp
@@ -43,7 +43,7 @@ end
 # Jf!(Fx, x, p, t)      where Fx = ∂f(x) / ∂x
 # x(t) -> x(t + Δt)
 # Φ = Φ(t + Δt, t)
-function odeSolve!(x, t, Δt, f!, Jf!, p, odeCache::ODECache; nSteps=1)
+function odeSolve!(x, t, Δt, f!, Jf!, p, odeCache::ODECache{T, D}; nSteps=1) where {T, D}
     Φ = odeCache.Φ
     fill!(Φ, 0)
     @inbounds for i in axes(Φ, 1)

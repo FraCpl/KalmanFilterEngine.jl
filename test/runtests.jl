@@ -267,13 +267,13 @@ function TEST_simpleKalman(type::Symbol)
 
     function klmSimple(x̂, P, y)
         # Update
-        K = (P*H')/(H*P*H' + R)
-        x̂ = x̂ + K*(y - H*x̂)
-        P = (I - K*H)*P #*transpose(I - K*H) + K*R*transpose(K)
+        K = (P * H') / (H * P * H' + R)
+        x̂ = x̂ + K * (y - H * x̂)
+        P = (I - K * H) * P #*transpose(I - K*H) + K*R*transpose(K)
 
         # Propagation
-        x̂ = Φ*x̂
-        P = Φ*P*Φ' + Q
+        x̂ = Φ * x̂
+        P = Φ * P * Φ' + Q
         return x̂, P
     end
 
@@ -281,12 +281,14 @@ function TEST_simpleKalman(type::Symbol)
     x = copy(x₀)
     x̂ = copy(x̂₀)
     P = copy(P₀)
+    Rrand = MvNormal(R)
+    Qrand = MvNormal(Q)
     for _ in 1:100
-        y = H*x + rand(MvNormal(R))     # Generate measurement
+        y = H*x + rand(Rrand)     # Generate measurement
         klm!(nav, meas, y)                    # Execute Kalman step
         x̂, P = klmSimple(x̂, P, y)       # Execute Kalman step (simple)
         ε = maximum([ε maximum(abs, (nav.x - x̂)) maximum(abs, (getCov(nav) - P))])    # Error
-        x = Φ*x + rand(MvNormal(Q))     # Propagate state
+        x = Φ*x + rand(Qrand)     # Propagate state
     end
 
     @show ε

@@ -1,8 +1,6 @@
 # KalmanFilterEngine.jl
 
-[![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://FraCpl.github.io/KalmanFilterEngine.jl/dev/)
-[![Build Status](https://github.com/FraCpl/KalmanFilterEngine.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/FraCpl/KalmanFilterEngine.jl/actions/workflows/CI.yml?query=branch%3Amaster)
-[![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
+[![Docs](https://img.shields.io/badge/docs-latest-blue.svg)](https://FraCpl.github.io/KalmanFilterEngine.jl/dev/)
 
 A high-performance, allocation-conscious Kalman filtering engine in Julia, designed for real-time and navigation-grade estimation problems.
 
@@ -141,48 +139,6 @@ f!(nav, p, t, dt)
 kalmanUpdateIter!(nav, y, h!, meas, p, t; iter=3)
 ```
 
----
-
-# Numerical Considerations
-
-## Symmetry of P
-
-Covariance matrices must remain symmetric:
-
-```
-P[i,j] = P[j,i]
-```
-
-It may be necessary to enforce symmetry explicitly after updates.
-
----
-
-## Positive Definiteness
-
-Ensure that `P` remains positive definite:
-
-* Avoid subtractive cancellation
-* Prefer Joseph form update
-* Consider square-root filtering (future improvement)
-
----
-
-## Stability Tips
-
-* Normalize innovations if needed
-* Monitor condition number of `S`
-* Use robust linear solvers instead of explicit inversion
-
----
-
-# Performance Tips
-
-* Use `@inbounds` in tight loops
-* Avoid temporary allocations in inner loops
-* Reuse buffers (`δx`, `δy`, etc.)
-* Consider `StaticArrays` for very small states
-
----
 
 # Future Work
 
@@ -206,9 +162,3 @@ It is intended for users who need:
 * real-time estimation
 * full control over numerical behavior
 * integration into larger systems (e.g., navigation stacks)
-
----
-
-# License
-
-(Insert license information here)

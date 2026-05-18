@@ -95,6 +95,8 @@ function kalmanPropagate!(nav::NavStateUKF, Δt, f!, p, Q; nSteps=1)
         δX .-= x
         BLAS.ger!(nav.Wc[i], δX, δX, P)
     end
+
+    return nothing
 end
 
 # h!(meas, x, p, t), shall fill meas.y, meas.H (if EKF), and meas.R

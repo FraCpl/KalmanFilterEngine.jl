@@ -9,10 +9,34 @@ mutable struct NavStateEKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}
 end
 
 """
-    NavStateEKF(t, x, P)
+    NavStateEKF(t, x, P; ns)
 
 Build EKF navigation state given as input the initial time, estimated
 state and navigation covariance matrix.
+*ns: number of solve-for states, assumed to be located at x[1:ns]
+"""
+
+"""
+    NavStateEKF(t, x, P; ns=size(P, 1))
+
+Construct an Extended Kalman Filter (EKF) navigation state.
+
+# Arguments
+- `t`: Initial time.
+- `x::AbstractVector`: Initial state estimate.
+- `P::AbstractMatrix`: Initial state covariance matrix.
+
+# Keyword Arguments
+- `ns::Int=size(P,1)`: Number of *solve-for* (error) states.
+  These are assumed to correspond to `x[1:ns]`. The remaining
+  states (if any) are treated as cosider-states.
+
+# Example
+```julia
+x0 = zeros(6)
+P0 = Matrix{Float64}(I, 6, 6)
+
+nav = NavStateEKF(0.0, x0, P0; ns=6)
 """
 function NavStateEKF(t, x, P, ns=size(P, 1))
     nδ = size(P, 1)
@@ -31,15 +55,15 @@ getCov(nav::NavStateEKF) = nav.P
 # dynamical model described by a set of 1st order ordinary differential
 # equations.
 """
-    kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps = 1)
+    kalmanPropagate!(nav, Δt, f, Jf, Q; nSteps=1)
 
 Propagate navigation state forward in time for ```Δt``` time units.
 
 Inputs include the dynamics function ```f!(ẋ, x, p, t)```, dynamics jacobian
 function ```Jf!(Fx, x, p, t)```, and equivalent discrete-time process noise
 covariance matrix ```Q```. The optional keyword argument ```nSteps``` indicates the
-number of RK4 steps to be performed when numerically integrating the system's
-dynamics. This function is only applicable to EKF and UDEKF.
+number of RK steps to be performed when numerically integrating the system's
+dynamics.
 """
 function kalmanPropagate!(nav::NavStateEKF, Δt, f!, Jf!, p, Q; nSteps=1)
     odeSolve!(nav.x, nav.t, Δt, f!, Jf!, p, nav.odeCache; nSteps=nSteps)
@@ -67,7 +91,7 @@ end
 end
 
 """
-    kalmanUpdate!(nav, meas, y)
+    kalmanUpdate!(nav, y, meas)
 
 Update state of the Kalman filter using the input measurement.
 """
@@ -79,6 +103,12 @@ function kalmanUpdate!(nav::NavStateEKF, y, meas::M) where {M<:AbstractNavMeasur
     return isRejected
 end
 
+"""
+    kalmanUpdate!(nav, y, h!, meas, p, t)
+
+h!(meas, x, p, t)
+Update state of the Kalman filter using the input measurement.
+"""
 function kalmanUpdate!(nav::NavStateEKF, y, h!, meas::M=NavMeasurement(nav.nδ, length(y)), p=nothing, t=nothing) where {M<:AbstractNavMeasurement}
     h!(meas, nav.x, p, t)
     return kalmanUpdate!(nav, y, meas)

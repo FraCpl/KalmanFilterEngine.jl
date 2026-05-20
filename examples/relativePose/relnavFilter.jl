@@ -270,7 +270,7 @@ function kalmanFilter!(navState, navData, y, R_CI, R_IL)
     # Update step at t[k-1] with y[k-1]
     for yk in y
         losMeas!(navData, navState.x, yk.posQF_Q, R_CI, R_IL)
-        kalmanUpdateError!(navState, navData.meas, yk.yMeas)
+        kalmanUpdateError!(navState, yk.yMeas, navData.meas)
     end
 
     # Update full state

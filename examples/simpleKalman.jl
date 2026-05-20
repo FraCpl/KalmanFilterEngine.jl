@@ -19,8 +19,6 @@ function kalmanFilter!(nav, meas, Δt, y, Q, iter=0)
     else
         kalmanUpdateIter!(nav, y, h!, meas; iter=iter)
     end                                 # Update step at t[k-1] with y[k-1]
-
-    # hasfield(typeof(nav), :P) && nav.P = 0.5(nav.P + nav.P')       # Sym P
     kalmanPropagate!(nav, Δt, f!, Jf!, 0, Q; nSteps=ceil(Int, Δt/10.0))    # Propagation step, from t[k-1] to t[k] = t[k-1] + Δt
 end
 
@@ -32,6 +30,7 @@ function main(; showplot=true)
     P₀ = diagm([1.0e3; 1.0e3; 1.0e3; 1.0e2; 1.0e2; 1.0e2] .^ 2)
 
     nav = NavState(0.0, x̂₀, P₀)
+    navS = NavState(0.0, x̂₀, P₀)
     navUD = NavState(0.0, x̂₀, P₀; type=:UD)
     navUKF = NavState(0.0, x̂₀, P₀; type=:UKF)
     navSRUKF = NavState(0.0, x̂₀, P₀; type=:SRUKF)
@@ -43,6 +42,7 @@ function main(; showplot=true)
 
     R = 100.0*Matrix(I(3))
     meas = NavMeasurement(length(x̂₀), 3; R=R, H=[I zeros(3, 3)])
+    measS = NavMeasurementScalar(length(x̂₀), 3; R=R, H=[I zeros(3, 3)])
     Rrand = MvNormal(R)
 
     x = nav.x + rand(MvNormal(getCov(nav)))
@@ -50,6 +50,8 @@ function main(; showplot=true)
     T = [0.0]
     X̂ = [getState(nav)];
     σ = [getStd(nav)]
+    X̂s = [getState(navS)];
+    σs = [getStd(navS)]
     X̂ud = [getState(navUD)];
     σud = [getStd(navUD)]
     X̂ukf = [getState(navUKF)];
@@ -66,6 +68,7 @@ function main(; showplot=true)
 
         # Perform Kalman Filter step, i.e., update x̂[k] and propagate to x̂[k+1]
         kalmanFilter!(nav, meas, Δt, y, Q)
+        kalmanFilter!(navS, measS, Δt, y, Q)
         # kalmanFilter!(navUD, Δt, ty, y, Q)
         kalmanFilter!(navUKF, meas, Δt, y, Q)
         # kalmanFilter!(navSRUKF, Δt, ty, y, Q)
@@ -80,11 +83,13 @@ function main(; showplot=true)
         push!(T, nav.t)
         push!(X, copy(x))
         push!(X̂, getState(nav))
+        push!(X̂s, getState(navS))
         push!(X̂ud, getState(navUD))
         push!(X̂ukf, getState(navUKF))
         push!(X̂srukf, getState(navSRUKF))
         push!(X̂iekf, getState(navIEKF))
         push!(σ, getStd(nav))
+        push!(σs, getStd(navS))
         push!(σud, getStd(navUD))
         push!(σukf, getStd(navUKF))
         push!(σsrukf, getStd(navSRUKF))
@@ -112,6 +117,7 @@ function main(; showplot=true)
         for i in 1:6
             # plotnav(axs[i], T, getindex.(X̂ukf, i), getindex.(X̂, i), 0getindex.(σ, i); color=:white)
             plotnav(axs[i], T, getindex.(X, i), getindex.(X̂, i), getindex.(σ, i); color=:white)
+            plotnav(axs[i], T, getindex.(X, i), getindex.(X̂s, i), getindex.(σs, i); color=:cyan)
             # plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ud, i), getindex.(σud, i); color=:red)
             plotnav(axs[i], T, getindex.(X, i), getindex.(X̂ukf, i), getindex.(σukf, i); color=:green, linestyle=:dash)
             # plotnav(axs[i], T, getindex.(X, i), getindex.(X̂srukf, i), getindex.(σsrukf, i); color=:orange)

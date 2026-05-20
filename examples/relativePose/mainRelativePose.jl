@@ -57,7 +57,7 @@ function main(Nsim=1)
 
         δx₀ = rand(P₀dist)
         x̂₀ = copy(x₀)
-        nav = NavState(0.0, updateNavState!(navData, x̂₀, δx₀), P₀, 12)
+        nav = NavState(0.0, updateNavState!(navData, x̂₀, δx₀), P₀; ns=12)
         x = copy(x₀)
         X = [copy(x)];
         T = [0.0];

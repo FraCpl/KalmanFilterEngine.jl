@@ -23,7 +23,7 @@ function NavStateSRUKF(t, x, P, ns=size(P, 1); α=1e-3, β=2.0, κ=0.0)
     nx = size(x, 1)
     γ, Wm, Wc = UKFweights(nx, α, β, κ)
     odeCache = ODECache(x, P)
-    return NavStateSRUKF(t, x, S, ns, γ, Wm, Wc, nx, [zero(x) for _ in 1:(2L + 1)], odeCache)
+    return NavStateSRUKF(t, x, S, ns, γ, Wm, Wc, nx, [zero(x) for _ in 1:(2*nx + 1)], odeCache)
 end
 
 getCov(nav::NavStateSRUKF) = nav.S'*nav.S

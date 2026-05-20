@@ -26,6 +26,7 @@ function f!(dx, x, μ, t)
         dx[i] = x[i+3]
         dx[i+3] = c * x[i]
     end
+    return nothing
 end
 
 function Jf!(J, x, μ, t)

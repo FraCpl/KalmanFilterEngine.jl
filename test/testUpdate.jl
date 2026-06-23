@@ -57,13 +57,43 @@ function testUpdate(mode=1)
 
     # Batch update of two measurements with naive Kalman filter formulas
     R = [R1 zeros(ny1, ny2); zeros(ny2, ny1) R2]
-    xu, Pu = kalmanUpdateSimple(copy(x0), copy(P0), [yMeas1; yMeas2], [y1; y2], R, [H1; H2], ns)
+    xTrue, PTrue = kalmanUpdateSimple(copy(x0), copy(P0), [yMeas1; yMeas2], [y1; y2], R, [H1; H2], ns)
 
-    @show errx = norm(xu - nav.x)
-    @show errp = norm(Pu - nav.P)
-    return errx + errp < 1e-13
+    err = norm(xTrue - nav.x) + norm(PTrue - nav.P)
+    @show err
+    return err < 1e-13
+end
+
+# This verifies that NavMeasurement with diagonal R provides the same result than using
+# NavMeasurementScalar
+function testUpdate2()
+    nx = 6; ns = 4
+    x0 = randn(nx)
+    P0 = generatePosDefMatrix(nx)
+    nav1 = NavState(0.0, x0, P0, ns=ns)
+    nav2 = NavState(0.0, x0, P0, ns=ns)
+
+    ny = 3
+    H = randn(ny, nx)
+    y = H * x0
+    yMeas = y + randn(ny)
+    R = diagm(abs.(randn(ny)))
+
+    meas1 = NavMeasurementScalar(nx, ny; H=H, R=R, nReject=1000)
+    meas2 = NavMeasurement(nx, ny; H=H, R=R, nReject=1000)
+
+    meas1.y .= y
+    meas2.y .= y
+
+    kalmanUpdate!(nav1, yMeas, meas1)
+    kalmanUpdate!(nav2, yMeas, meas2)
+
+    err = norm(nav1.x - nav2.x) + norm(nav1.P - nav2.P)
+    @show err
+    return err < 1e-13
 end
 
 @show "Scalar meas", testUpdate(1)
 @show "Full meas", testUpdate(2)
 @show "Mix meas", testUpdate(3)
+@show testUpdate2()

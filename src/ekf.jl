@@ -1,20 +1,20 @@
 mutable struct NavStateEKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64},D<:AbstractVector{Float64}} <: AbstractNavState
-    t::Float64              # Time corresponding to the estimated state
-    x::T                    # Full estimated state, x[t]
-    P::M                    # Covariance Matrix, P[t]
-    δx::D                   # Error state, δx[t]
-    const ns::Int64         # Number of solve-for (error) states
-    const nc::Int64         # Number of consider (error) states
-    const nx::Int64         # Number of (error) states
-    tc::Float64             # Nav time of Pcc
-    Pcc::Matrix{Float64}    # Consider-covariance matrix Pcc, where P = [Pss Psc; Pcs Pcc]
-    odeCache::ODECache{T, M}
+    t::Float64                  # Time corresponding to the estimated state
+    tc::Float64                 # Nav time of Pcc
+    x::T                        # Full estimated state, x[t]
+    P::M                        # Covariance Matrix, P[t]
+    δx::D                       # Error state, δx[t]
+    const ns::Int64             # Number of solve-for (error) states
+    const nc::Int64             # Number of consider (error) states
+    const nx::Int64             # Number of (error) states
+    Pcc::Matrix{Float64}        # Consider-covariance matrix Pcc, where P = [Pss Psc; Pcs Pcc]
+    odeCache::ODECache{T, M}    # ODE cache for continuous-time integration
 end
 
 function NavStateEKF(t, x, P, ns=size(P, 1))
     nx = size(P, 1)     # number of error states
     odeCache = ODECache(x, P)
-    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, nx - ns, nx, t - 1.0, zero(P[ns+1:nx, ns+1:nx]), odeCache)
+    return NavStateEKF(t, t - 1.0, x, P, zero(P[:, 1]), ns, nx - ns, nx, zero(P[ns+1:nx, ns+1:nx]), odeCache)
 end
 
 """
@@ -180,7 +180,7 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurement)
     rdiv!(K, cholesky!(Hermitian(Pyy)))        # K = Pxy / Pyy, Caution: this modifies Pyy
 
     # Update error state and covariance matrix
-    # We update the full error state and covariance matrix with the optimal filter gain and
+    # We update the entire error state and covariance matrix with the optimal filter gain and
     # covariance update formulas. Consider states are handled, only after all synchronized
     # measurements have been processed, by calling kalmanErrorToFullState!
     @inbounds for r in 1:nx, j in 1:ny
@@ -290,11 +290,11 @@ end
     end
 end
 
-# sumState!(x, δx, p), updates x with x ⨁ δx
+# sumState!(x, δx, p), in-place update of the full state x with the error state δx, i.e., x ← x ⨁ δx
 function kalmanErrorToFullState!(nav::NavStateEKF, sumState!::F=sumDefault!, p::T=nothing) where {F, T}
     # The error state has been computed using the optimal Kalman formulas on the full error
     # state, i.e., without separately considering solve-for and consider error states.
-    # In this function we restore the correct Schmidt-Kalman formulation, by setting to
+    # In this function we restore the correct Schmidt-Kalman behavior, by setting to
     # zero the consider error states (so that the consider full states are NOT updated), and
     # restoring the original consider-consider covariance matrix Pcc.
     # When manually implementing an ESKF, this function MUST be called at the end of the
@@ -308,7 +308,7 @@ function kalmanErrorToFullState!(nav::NavStateEKF, sumState!::F=sumDefault!, p::
         nav.δx[i] = 0
     end
     sumState!(nav.x, nav.δx, p)
-    nav.δx .= 0                     # Reset error state, better safe than sorry
+    nav.δx .= 0         # Reset error state, better safe than sorry
 
     # Restore original covariance matrix for consider-parameters
     @inbounds for i in 1:nc, j in i:nc

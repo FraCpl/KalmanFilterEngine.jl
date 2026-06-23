@@ -321,4 +321,5 @@ end
     @test testUpdate(1)
     @test testUpdate(2)
     @test testUpdate(3)
+    @test testUpdate2()
 end

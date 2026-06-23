@@ -5,7 +5,7 @@ mutable struct NavStateUD{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64},
     D::X                    # Covariance Matrix UD, D[t]
     δx::X                   # Error state, δx[t]
     const ns::Int64         # Number of solve for (error) states
-    const nδ::Int64         # Number of error states
+    const nx::Int64         # Number of error states
 
     odeCache::ODECache
 end
@@ -19,9 +19,9 @@ state and navigation covariance matrix.
 function NavStateUD(t, x, P, ns=size(P, 1))
     # @warning "WORK-IN-PROGRESS: might not work!"
     U, D = UD(P)
-    nδ = size(U, 1)
+    nx = size(U, 1)
     odeCache = ODECache(x, P)
-    return NavStateUD(t, x, U, D, zero(P[:, 1]), ns, nδ, odeCache)
+    return NavStateUD(t, x, U, D, zero(P[:, 1]), ns, nx, odeCache)
 end
 
 getCov(nav::NavStateUD) = nav.U*diagm(nav.D)*nav.U'
@@ -256,8 +256,8 @@ end
 # Φpp of non correlated states must be diagonal
 # Q of non correlated states must be diagonal (Qpp diagonal and Qxp = 0)
 function UDpropagate(U, D, Φ, Q, nc)
-    nδ = size(Φ, 1)
-    np = nδ - nc       # Number of parameters (i.e., non correlated states)
+    nx = size(Φ, 1)
+    np = nx - nc       # Number of parameters (i.e., non correlated states)
 
     # Solve first sub-problem
     Φxx = Φ[1:nc, 1:nc]
@@ -298,12 +298,12 @@ function UDpropagate(U, D, Φ, Q, nc)
         return Ũxx, D̃xx
     end
 
-    Ũ = [Ũxx Φ[1:nc, :]*U[:, (nc + 1):nδ]; zeros(np, nc) U[(nc + 1):nδ, (nc + 1):nδ]]    # Eq. (7.27) (7.29)
-    D̃ = [D̃xx; D[(nc + 1):nδ]]                                                  # Eq. (7.28)
+    Ũ = [Ũxx Φ[1:nc, :]*U[:, (nc + 1):nx]; zeros(np, nc) U[(nc + 1):nx, (nc + 1):nx]]    # Eq. (7.27) (7.29)
+    D̃ = [D̃xx; D[(nc + 1):nx]]                                                  # Eq. (7.28)
 
     # Reference: C. L. Thornton, Triangular Covariance Factorizations for Kalman Filtering, 1976, page 61
-    Qpp = diag(Q[(nc + 1):nδ, (nc + 1):nδ])
-    M = diag(Φ[(nc + 1):nδ, (nc + 1):nδ])
+    Qpp = diag(Q[(nc + 1):nx, (nc + 1):nx])
+    M = diag(Φ[(nc + 1):nx, (nc + 1):nx])
     Ū = copy(Ũ)
     D̄ = copy(D̃)
     @inbounds for k in 1:np
@@ -311,7 +311,7 @@ function UDpropagate(U, D, Φ, Q, nc)
         D̄[na + 1] = M[k]^2 * D̃[na + 1] + Qpp[k]                   # d_up_b, Eq. (7.38)
         α = M[k] * D̃[na + 1] / D̄[na + 1]                            # [Default]
         Ū[1:na, na + 1] = α .* Ũ[1:na, na + 1]                      # U_up_ab, Eq. (7.39)
-        Ū[na + 1, (na + 2):nδ] = M[k] .* Ũ[na + 1, (na + 2):nδ]        # U_up_bc, Eq. (7.37)
+        Ū[na + 1, (na + 2):nx] = M[k] .* Ũ[na + 1, (na + 2):nx]        # U_up_bc, Eq. (7.37)
         if Qpp[k] > 0
             c = α * Qpp[k] / M[k]
             Ū[1:na, 1:na], D̄[1:na] = ageeTurnerUpdate(Ū[1:na, 1:na], D̄[1:na], c, Ũ[1:na, na + 1])  # Eq. (7.40)
@@ -333,7 +333,7 @@ end
     ny = length(y)
     δy = zeros(ny)
     δz = zeros(ny)
-    nx = length(nav.D)
+    nx = nav.nx
     isRejected = false
 
     @inbounds for i in 1:ny
@@ -352,7 +352,7 @@ end
 
             # Perform Agee-Turner rank-one update to account for consider states
             if nx > nav.ns
-                nav.U, nav.D = ageeTurnerUpdate(nav.U, nav.D, α, [zeros(nav.ns); K[(nav.ns + 1):nav.nδ]]);
+                nav.U, nav.D = ageeTurnerUpdate(nav.U, nav.D, α, [zeros(nav.ns); K[(nav.ns + 1):nav.nx]]);
             end
 
             for j in 1:nav.ns

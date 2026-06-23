@@ -269,7 +269,7 @@ function TEST_simpleKalman(type::Symbol)
         # Update
         K = (P * H') / (H * P * H' + R)
         x̂ = x̂ + K * (y - H * x̂)
-        P = (I - K * H) * P #*transpose(I - K*H) + K*R*transpose(K)
+        P = (I - K * H) * P
 
         # Propagation
         x̂ = Φ * x̂
@@ -318,6 +318,7 @@ end
     # @test TEST_simpleKalman(:UD) < ERR_TOL
     @test TEST_simpleKalman(:UKF) < 10ERR_TOL
     # @test TEST_simpleKalman(:SRUKF) < 100*ERR_TOL # TODO: Not working!
-    @test testUpdate(true)
-    @test testUpdate(false)
+    @test testUpdate(1)
+    @test testUpdate(2)
+    @test testUpdate(3)
 end

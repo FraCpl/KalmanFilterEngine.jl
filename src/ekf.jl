@@ -3,18 +3,18 @@ mutable struct NavStateEKF{T<:AbstractVector{Float64},M<:AbstractMatrix{Float64}
     x::T                    # Full estimated state, x[t]
     P::M                    # Covariance Matrix, P[t]
     δx::D                   # Error state, δx[t]
-    const ns::Int64         # Number of solve for (error) states
+    const ns::Int64         # Number of solve-for (error) states
     const nc::Int64         # Number of consider (error) states
-    const nδ::Int64         # Number of error states
+    const nx::Int64         # Number of (error) states
     tc::Float64             # Nav time of Pcc
     Pcc::Matrix{Float64}    # Consider-covariance matrix Pcc, where P = [Pss Psc; Pcs Pcc]
     odeCache::ODECache{T, M}
 end
 
 function NavStateEKF(t, x, P, ns=size(P, 1))
-    nδ = size(P, 1)     # number of error states
+    nx = size(P, 1)     # number of error states
     odeCache = ODECache(x, P)
-    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, nδ - ns, nδ, t - 1.0, zero(P[ns+1:nδ, ns+1:nδ]), odeCache)
+    return NavStateEKF(t, x, P, zero(P[:, 1]), ns, nx - ns, nx, t - 1.0, zero(P[ns+1:nx, ns+1:nx]), odeCache)
 end
 
 """
@@ -104,12 +104,12 @@ end
 h!(meas, x, p, t)
 Update state of the Kalman filter using the input measurement.
 """
-function kalmanUpdate!(nav::NavStateEKF, y, h!, meas::M=NavMeasurement(nav.nδ, length(y)), p=nothing, t=nothing) where {M<:AbstractNavMeasurement}
+function kalmanUpdate!(nav::NavStateEKF, y, h!, meas::M=NavMeasurement(nav.nx, length(y)), p=nothing, t=nothing) where {M<:AbstractNavMeasurement}
     h!(meas, nav.x, p, t)
     return kalmanUpdate!(nav, y, meas)
 end
 
-function kalmanUpdateError!(nav::NavStateEKF, y, h!, meas::M=NavMeasurement(nav.nδ, length(y)), p=nothing, t=nothing) where {M<:AbstractNavMeasurement}
+function kalmanUpdateError!(nav::NavStateEKF, y, h!, meas::M=NavMeasurement(nav.nx, length(y)), p=nothing, t=nothing) where {M<:AbstractNavMeasurement}
     h!(meas, nav.x, p, t)
     return kalmanUpdateError!(nav, y, meas)
 end
@@ -136,7 +136,7 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurement)
     nReject = meas.nReject
 
     ns = nav.ns
-    nδ = nav.nδ
+    nx = nav.nx
     nc = nav.nc
     ny = length(y)
     δx = nav.δx
@@ -183,7 +183,7 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurement)
     # We update the full error state and covariance matrix with the optimal filter gain and
     # covariance update formulas. Consider states are handled, only after all synchronized
     # measurements have been processed, by calling kalmanErrorToFullState!
-    @inbounds for r in 1:nδ, j in 1:ny
+    @inbounds for r in 1:nx, j in 1:ny
         # Kalman gain
         k = K[r, j]
 
@@ -191,9 +191,9 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurement)
         δx[r] += k * δy[j]
 
         # Covariance update: P -= K * Pxy'
-        for c in r:nδ
+        for c in r:nx
             P[r, c] -= k * Pxy[c, j]
-            P[c, r] = P[r, c]
+            P[c, r] = P[r, c]   # maintain symmetry explicitly
         end
     end
 
@@ -212,7 +212,7 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurementScalar)
     δz = meas.δz
     Pxy = meas.Pxy
     nReject = meas.nReject
-    nδ = nav.nδ
+    nx = nav.nx
     ns = nav.ns
     nc = nav.nc
     δx = nav.δx
@@ -239,12 +239,12 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurementScalar)
         Pyy = R[i, i]
         Hδx = 0.0
 
-        for j in 1:nδ
+        for j in 1:nx
             hij = H[i, j]
             Hδx += hij * δx[j]
 
             acc = 0.0
-            for k in 1:nδ
+            for k in 1:nx
                 acc += P[j, k] * H[i, k]
             end
 
@@ -265,7 +265,7 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurementScalar)
         # covariance update formulas. Consider states are handled, only after all synchronized
         # measurements have been processed, by calling kalmanErrorToFullState!
         iPyy = 1 / Pyy
-        @inbounds for r in 1:nδ
+        @inbounds for r in 1:nx
             # Kalman gain (scalar measurement)
             K = Pxy[r] * iPyy
 
@@ -273,7 +273,7 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurementScalar)
             δx[r] += K * δy[i]
 
             # Covariance update: P -= K * Pxy'
-            for c in r:nδ
+            for c in r:nx
                 P[r, c] -= K * Pxy[c]
                 P[c, r] = P[r, c]   # maintain symmetry explicitly
             end
@@ -300,14 +300,15 @@ function kalmanErrorToFullState!(nav::NavStateEKF, sumState!::F=sumDefault!, p::
     # When manually implementing an ESKF, this function MUST be called at the end of the
     # measurements updates cycle.
     ns = nav.ns
-    nδ = nav.nδ
+    nx = nav.nx
     nc = nav.nc
 
-    # Set to zero consider parameters
-    @inbounds for i in ns+1:nδ
+    # Set to zero consider parameters and update full state
+    @inbounds for i in ns+1:nx
         nav.δx[i] = 0
     end
     sumState!(nav.x, nav.δx, p)
+    nav.δx .= 0                     # Reset error state, better safe than sorry
 
     # Restore original covariance matrix for consider-parameters
     @inbounds for i in 1:nc, j in i:nc
@@ -315,8 +316,8 @@ function kalmanErrorToFullState!(nav::NavStateEKF, sumState!::F=sumDefault!, p::
     end
 
     # Reset time flag and error state
-    nav.tc = nav.t - 1      # We only need tc to be smaller than t
-    nav.δx .= 0             # better safe than sorry
+    # We only need tc to be smaller than t
+    nav.tc = nav.t - 1
 
     return nothing
 end

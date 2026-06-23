@@ -81,7 +81,7 @@ function updateQuat(q, δθ, qTmp)
     return q_multiply(q, qTmp)
 end
 
-function updateNavState!(navData::NavData, x, δx)
+function updateNavState!(x, δx, navData::NavData)
     if !all(iszero, δx)
         qTmp = navData.qTmp
         for ix in 1:6
@@ -91,7 +91,6 @@ function updateNavState!(navData::NavData, x, δx)
         for ix in 11:lastindex(x)
             x[ix] += δx[ix-1]
         end
-        δx .= 0.0
     end
     return x
 end
@@ -274,8 +273,7 @@ function kalmanFilter!(navState, navData, y, R_CI, R_IL)
     end
 
     # Update full state
-    updateNavState!(navData, navState.x, navState.δx)
-    navState.P .= 0.5 .* (navState.P + navState.P')
+    kalmanErrorToFullState!(navState, updateNavState!, navData)
 
     # Propagate state from t[k-1] to t[k]
     kalmanPropagate!(navState, navData.Δt, navDyn!, navDynJacobian!, navData, navData.Q; nSteps=5)

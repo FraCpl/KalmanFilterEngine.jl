@@ -29,22 +29,24 @@ struct NavMeasurementScalar{T, U} <: AbstractNavMeasurement
     Pxy::Vector{T}          # KF allocation
 end
 
-function NavMeasurement(nδ::Int, ny::Int; R=zeros(ny, ny), H=zeros(ny, nδ), nReject=6)
+# nx is the number of error states
+function NavMeasurement(nx::Int, ny::Int; R=zeros(ny, ny), H=zeros(ny, nx), nReject=6)
     y = zeros(ny)
     δy = zeros(ny)
     δz = zeros(ny)
-    Pxy = zeros(nδ, ny)
+    Pxy = zeros(nx, ny)
     Pyy = zeros(ny, ny)
-    K = zeros(nδ, ny)
-    nX = 2*nδ + 1
+    K = zeros(nx, ny)
+    nX = 2*nx + 1
     Y = [zeros(ny) for _ in 1:nX]
     return NavMeasurement(y, R, H, nReject, δy, δz, Pxy, Pyy, K, Y)
 end
 
-function NavMeasurementScalar(nδ::Int, ny::Int; R=zeros(ny, ny), H=zeros(ny, nδ), nReject=6)
+# nx is the number of error states
+function NavMeasurementScalar(nx::Int, ny::Int; R=zeros(ny, ny), H=zeros(ny, nx), nReject=6)
     y = zeros(ny)
     δy = zeros(ny)
     δz = zeros(ny)
-    Pxy = zeros(nδ)
+    Pxy = zeros(nx)
     return NavMeasurementScalar(y, R, H, nReject, δy, δz, Pxy)
 end

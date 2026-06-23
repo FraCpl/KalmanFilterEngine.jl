@@ -1,9 +1,10 @@
 # This update routine implements an IEKF
 # https://ntrs.nasa.gov/api/citations/20140006041/downloads/20140006041.pdf
-function kalmanUpdateIter!(nav::NavStateEKF, y, h!, meas::NavMeasurement=NavMeasurement(nav.nδ, length(y)), p=nothing, t=nothing; iter=3)
-    @warn "TO BE UPDATED! --> SEE ESKF"
+function kalmanUpdateIter!(nav::NavStateEKF, y, h!, meas::NavMeasurement=NavMeasurement(nav.nx, length(y)), p=nothing, t=nothing; iter=3)
+    # @warn "TO BE UPDATED! --> SEE ESKF"
     ns = nav.ns
-    nδ = nav.nδ
+    nx = nav.nx
+    nc = nav.nc
     xIter = nav.odeCache.K1
     δx = nav.δx
     P = nav.P
@@ -15,6 +16,19 @@ function kalmanUpdateIter!(nav::NavStateEKF, y, h!, meas::NavMeasurement=NavMeas
     Pyy = meas.Pyy
     K = meas.K
     nReject = meas.nReject
+
+    # If Pcc has not been saved yet, save it.
+    # This is required when updating the full state with the error state once all
+    # simultaneous measurements have been processed
+    if nc > 0 && nav.tc < nav.t
+        # We don't store the exact time to avoid float comparison, we just make sure that
+        # tc is now bigger than t.
+        nav.tc = nav.t + 1
+        @inbounds for i in 1:nc, j in i:nc
+            # We only save upper triangular as it is the only one used in kalmanErrorToFullState!
+            nav.Pcc[i, j] = P[i+ns, j+ns]
+        end
+    end
 
     # Start iterations
     xIter .= x
@@ -54,49 +68,44 @@ function kalmanUpdateIter!(nav::NavStateEKF, y, h!, meas::NavMeasurement=NavMeas
         for j in 1:ny
             # compute Hδx once
             Hδxj = 0.0
-            for k in 1:nδ
+            for k in 1:nx
                 Hδxj += H[j, k] * δx[k]
             end
 
             # rank-1 update
             rj = y[j] - ŷ[j] - Hδxj
-            for r in 1:ns
+            for r in 1:nx
                 xIter[r] += K[r, j] * rj
             end
         end
     end
 
     # Update state
-    x .= xIter
+    @inbounds for i in 1:ns
+        x[i] = xIter[i]     # Only solve-for states are updated
+    end
     xIter .= 0      # Reset ODE cache variables
 
-    # Update covariance matrix (non-optimal gain with consider states)
-    @inbounds for r in 1:ns, j in 1:ny
-        # P[1:ns, 1:ns] .-= Ks * Pyy * Ks' = -Pxy * Ks'
-        # P[1:ns, (ns + 1):nδ] .-= Ks * Pyx
-        pxy = Pxy[r, j]
+    # Update covariance matrix
+    # We update the full covariance matrix with the optimal filter gain and
+    # covariance update formulas. Consider states are handled, only after all synchronized
+    # measurements have been processed, by calling kalmanErrorToFullState!
+    @inbounds for r in 1:nx, j in 1:ny
+        # Kalman gain
         k = K[r, j]
 
-        # Top left block: P[1:ns, 1:ns] (upper triangular only)
-        for c in r:ns
-            P[r, c] -= pxy * K[c, j]
-        end
-
-        # Top right block: P[1:ns, (ns + 1):nδ]
-        for c in ns+1:nδ
+        # Covariance update: P -= K * Pxy'
+        for c in r:nx
             P[r, c] -= k * Pxy[c, j]
+            P[c, r] = P[r, c]
         end
     end
 
-    # Make covariance matrix symmetric
-    # P[1:ns, 1:ns] (lower triangular only)
-    @inbounds for r in 2:ns, c in 1:r-1
-        P[r, c] = P[c, r]
+    # Restore original covariance matrix for consider-parameters
+    @inbounds for i in 1:nc, j in i:nc
+        nav.P[i+ns, j+ns] = nav.P[j+ns, i+ns] = nav.Pcc[i, j]
     end
-    # P[ns+1:nδ, 1:ns]
-    @inbounds for r in (ns + 1):nδ, c in 1:ns
-        P[r, c] = P[c, r]
-    end
+    nav.tc = nav.t - 1      # We only need tc to be smaller than t
 
     return false
 end

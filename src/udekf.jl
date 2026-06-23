@@ -225,11 +225,11 @@ end
             f = f ./ D̄[j]
         end
         @inbounds for i in 1:(j - 1)
-            Ū[i, j] = b[:, i]'*f;
-            b[:, i] = b[:, i] - Ū[i, j]*b[:, j];
+            Ū[i, j] = b[:, i]'*f
+            b[:, i] = b[:, i] - Ū[i, j]*b[:, j]
         end
     end
-    D̄[1] = b[:, 1]'*(D .* b[:, 1]);
+    D̄[1] = b[:, 1]'*(D .* b[:, 1])
 
     return Ū, D̄
 end

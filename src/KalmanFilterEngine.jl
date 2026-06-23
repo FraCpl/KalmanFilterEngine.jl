@@ -10,7 +10,8 @@ include("utils.jl")
 
 export NavState, AbstractNavState, getState
 export getCov, kalmanPropagate!, kalmanPropagateCov!, transformCov!
-export kalmanUpdate!, kalmanUpdateError!, kalmanUpdateIter!, kalmanUpdateScalar!, kalmanUpdateErrorScalar!
+export kalmanUpdate!, kalmanUpdateError!, kalmanUpdateIter!, kalmanUpdateScalar!
+export kalmanUpdateErrorScalar!, kalmanErrorToFullState!
 export NavMeasurement, NavMeasurementScalar
 include("NavMeasurement.jl")
 include("NavState.jl")

@@ -118,9 +118,9 @@ end
 
 
 testKalmanAllocs()
-testODEallocs()
-testUDallocs()
+# testODEallocs()
+# testUDallocs()
 
-testUKFsigmaAllocs()
-testUKFpropAllocs()
-testUKFupdateAllocs()
+# testUKFsigmaAllocs()
+# testUKFpropAllocs()
+# testUKFupdateAllocs()

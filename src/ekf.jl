@@ -267,14 +267,14 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurementScalar)
         iPyy = 1 / Pyy
         @inbounds for r in 1:nx
             # Kalman gain (scalar measurement)
-            K = Pxy[r] * iPyy
+            k = Pxy[r] * iPyy
 
             # State update
-            δx[r] += K * δy[i]
+            δx[r] += k * δy[i]
 
             # Covariance update: P -= K * Pxy'
             for c in r:nx
-                P[r, c] -= K * Pxy[c]
+                P[r, c] -= k * Pxy[c]
                 P[c, r] = P[r, c]   # maintain symmetry explicitly
             end
         end

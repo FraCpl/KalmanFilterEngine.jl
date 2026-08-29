@@ -156,8 +156,8 @@ function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurement)
     end
 
     # Estimated measurement and jacobians
-    mul!(Pxy, P, transpose(H))      # Pxy = P*Hᵀ
-    mul!(Pyy, H, Pxy)               # Pyy = H*P*Hᵀ + R
+    mul!(Pxy, P, H')        # Pxy = P*Hᵀ
+    mul!(Pyy, H, Pxy)       # Pyy = H*P*Hᵀ + R
     Pyy .+= R
 
     # Measurement editing

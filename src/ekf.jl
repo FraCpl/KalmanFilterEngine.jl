@@ -120,9 +120,9 @@ end
 Update error state of the Kalman filter using the input measurement.
 This function is only applicable to EKF and UDEKF.
 """
-# Returns an 'isRejected' flag.
-# Recursive Implementations of the Schmidt-Kalman Consider Filter (Zanetti, D'Souza)
 function kalmanUpdateError!(nav::NavStateEKF, y, meas::NavMeasurement)
+    # Returns an 'isRejected' flag.
+    # Recursive Implementations of the Schmidt-Kalman Consider Filter (Zanetti, D'Souza)
 
     # Extract data from nav and meas
     ŷ = meas.y

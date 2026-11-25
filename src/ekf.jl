@@ -78,12 +78,8 @@ end
 
 # P' = A*P*Aᵀ, where size(A) == size(P)
 @inline function transformCov!(nav::NavStateEKF, A)
-    Aᵀ = nav.odeCache.P2
-    PAᵀ = nav.odeCache.P1
-    transpose!(Aᵀ, A)
-    mul!(PAᵀ, nav.P, Aᵀ)
-    mul!(nav.P, A, PAᵀ)
-    return nav.P
+    P1 = nav.odeCache.P1
+    return mul!(nav.P, mul!(P1, A, nav.P), transpose(A))
 end
 
 """
